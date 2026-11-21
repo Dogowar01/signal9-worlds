@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router';
 import {
-  ChevronDown, ChevronRight, Clock, Eye, EyeOff, Globe, HeartPulse, Home, LayoutTemplate, Lightbulb, Lock, Map, Moon,
+  ChevronRight, Clock, Eye, EyeOff, HeartPulse, Home, LayoutTemplate, Lightbulb, Lock, Map, Moon,
   Network, Plus, Search, Settings, Star, Sun,
 } from 'lucide-react';
 import type { Article } from '../db';
@@ -9,6 +9,7 @@ import { useWorld } from '../lib/world';
 import { usePrefs } from '../lib/prefs';
 import { useCreateArticle } from '../lib/actions';
 import { TemplateIcon } from '../icons';
+import { WorldSigil } from './WorldArt';
 
 export function Sidebar({ onSearch, onNavigate }: { onSearch: () => void; onNavigate: () => void }) {
   const { world, articles, templates, index } = useWorld();
@@ -34,7 +35,7 @@ export function Sidebar({ onSearch, onNavigate }: { onSearch: () => void; onNavi
     <aside className="sidebar" onClick={(e) => (e.target as HTMLElement).closest('a') && onNavigate()}>
       <div className="sidebar-head">
         <button className="world-switch" onClick={() => navigate('/')} title="All worlds">
-          <Globe size={16} />
+          <WorldSigil seed={world.id} size={30} />
           <span>{world.name}</span>
         </button>
       </div>
@@ -114,8 +115,8 @@ function Group({ label, icon, color, count, onAdd, children }: { label: string; 
   return (
     <div className="group">
       <div className="group-head">
-        <button className="group-toggle" onClick={() => setOpen(!open)}>
-          {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        <button className="group-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+          <ChevronRight size={13} className={`chev ${open ? 'open' : ''}`} />
           <TemplateIcon name={icon} size={13} color={color} />
           {label} <span className="muted">{count}</span>
         </button>
@@ -123,7 +124,9 @@ function Group({ label, icon, color, count, onAdd, children }: { label: string; 
           <Plus size={13} />
         </button>
       </div>
-      {open && <div className="group-body">{children}</div>}
+      <div className={`group-body ${open ? 'open' : ''}`}>
+        <div>{children}</div>
+      </div>
     </div>
   );
 }
@@ -138,7 +141,7 @@ function TreeNode({ a, depth }: { a: Article; depth: number }) {
       <div className="tree-row" style={{ paddingLeft: depth * 12 }}>
         {kids.length ? (
           <button className="twisty" onClick={() => setOpen(!open)} aria-label={open ? 'Collapse' : 'Expand'}>
-            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            <ChevronRight size={12} className={`chev ${open ? 'open' : ''}`} />
           </button>
         ) : (
           <span className="twisty" />

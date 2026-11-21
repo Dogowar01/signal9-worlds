@@ -63,6 +63,7 @@ function WorldShell() {
             <Menu size={20} />
           </button>
           <ErrorBoundary resetKey={location.pathname}>
+          <div className="route-anim" key={location.pathname.replace(/\/edit$/, '')}>
           <Routes>
             <Route index element={<Dashboard />} />
             <Route path="a/:articleId" element={<ArticleView />} />
@@ -76,6 +77,7 @@ function WorldShell() {
             <Route path="prompts" element={<PromptsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Routes>
+          </div>
           </ErrorBoundary>
         </main>
       </div>

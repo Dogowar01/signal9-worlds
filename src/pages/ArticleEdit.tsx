@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Bold, Check, Columns2, Heading, ImagePlus, Italic, Link2, List, Lock, Quote, Trash2 } from 'lucide-react';
-import { propagateRename, snapshotArticle, updateArticle, type Article, type Status } from '../db';
+import { deleteArticle, propagateRename, snapshotArticle, updateArticle, type Article, type Status } from '../db';
 import { useWorld } from '../lib/world';
 import { imageFileToDataUrl } from '../lib/io';
 import { LinkEditor, type LinkEditorHandle } from '../components/LinkEditor';
@@ -10,6 +10,15 @@ import { Markdown } from '../components/Markdown';
 import { TemplateIcon } from '../icons';
 
 const list = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean);
+
+const pendingDelete = new Map<string, number>();
+const isBlank = (a: Article) =>
+  (!a.title.trim() || a.title.trim() === 'Untitled') &&
+  !a.body.trim() &&
+  !a.summary.trim() &&
+  !a.image &&
+  !a.parentId &&
+  Object.values(a.fields).every((v) => !v.trim());
 
 export function ArticleEdit() {
   const { articleId = '' } = useParams();
@@ -71,9 +80,23 @@ function Editor({ source }: { source: Article }) {
 
   // Save + fix renamed links if the user navigates away without pressing Done.
   useEffect(() => {
+    // React dev mode re-mounts immediately; cancel a cleanup-delete scheduled by that first unmount.
+    const pending = pendingDelete.get(source.id);
+    if (pending) {
+      window.clearTimeout(pending);
+      pendingDelete.delete(source.id);
+    }
     return () => {
       window.clearTimeout(timer.current);
       const d = latest.current;
+      if (isBlank(d)) {
+        // Abandoned "Untitled" article: remove it rather than leave clutter behind.
+        pendingDelete.set(d.id, window.setTimeout(() => {
+          pendingDelete.delete(d.id);
+          deleteArticle(d.id);
+        }, 250));
+        return;
+      }
       const finish = () => propagateRename(d.worldId, originalTitle.current, d.title, d.id);
       if (dirty.current) {
         const { id, worldId, createdAt, updatedAt, ...changes } = d;
@@ -89,6 +112,7 @@ function Editor({ source }: { source: Article }) {
   walk(source.id);
 
   const done = async () => {
+    if (isBlank(latest.current)) return navigate(base);
     await flush();
     navigate(`${base}/a/${source.id}`);
   };

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Clock, Eye, FilePlus, HeartPulse, Lightbulb, Map, Network, Settings } from 'lucide-react';
+import { Clock, Eye, FilePlus, HeartPulse, Lightbulb, Map, Network, Search, Settings } from 'lucide-react';
 import { useWorld } from '../lib/world';
 import { usePrefs } from '../lib/prefs';
 import { searchArticles } from '../lib/search';
@@ -86,6 +86,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   return (
     <div className="overlay" onMouseDown={onClose}>
       <div className="palette" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label="Search">
+        <div className="palette-search">
+        <Search size={18} />
         <input
           ref={inputRef}
           value={q}
@@ -98,6 +100,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             else if (e.key === 'Enter') items[sel]?.run();
           }}
         />
+        <kbd>Esc</kbd>
+        </div>
         <div className="palette-list" ref={listRef}>
           {items.map((it, i) => (
             <button key={it.key} className={`palette-item ${i === sel ? 'sel' : ''}`} onMouseEnter={() => setSel(i)} onClick={it.run}>
@@ -108,7 +112,11 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           ))}
           {items.length === 0 && <p className="muted pad">Nothing found.</p>}
         </div>
-        <div className="palette-foot muted small">↑↓ to move · Enter to open · Esc to close</div>
+        <div className="palette-foot muted small">
+          <span><kbd>↑</kbd> <kbd>↓</kbd> move</span>
+          <span><kbd>Enter</kbd> open</span>
+          <span><kbd>Esc</kbd> close</span>
+        </div>
       </div>
     </div>
   );

@@ -176,7 +176,7 @@ function MapCanvas({ map, allMaps }: { map: WorldMap; allMaps: WorldMap[] }) {
         >
           <div className="map-layer" style={{ width: map.width, height: map.height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
             <img src={map.image} width={map.width} height={map.height} alt={map.name} draggable={false} />
-            {pins.map((p) => {
+            {pins.map((p, i) => {
               const a = p.articleId ? index.byId.get(p.articleId) : undefined;
               const hiddenLink = a && playerView && a.gmOnly;
               return (
@@ -184,7 +184,7 @@ function MapCanvas({ map, allMaps }: { map: WorldMap; allMaps: WorldMap[] }) {
                   key={p.id}
                   data-pin={p.id}
                   className={`pin ${selected === p.id ? 'sel' : ''} ${p.mapId ? 'portal' : ''}`}
-                  style={{ left: p.x * map.width, top: p.y * map.height, transform: `translate(-50%, -100%) scale(${1 / view.k})`, ['--pin' as string]: p.color }}
+                  style={{ left: p.x * map.width, top: p.y * map.height, transform: `translate(-50%, -100%) scale(${1 / view.k})`, ['--pin' as string]: p.color, ['--i' as string]: Math.min(i, 20) }}
                   title={hiddenLink ? p.label : p.label}
                 >
                   {p.mapId ? <MapIcon size={18} /> : <MapPin size={22} fill="currentColor" />}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Clock, History, Lock, MapPin, Network, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
+import { Clock, Ghost, History, Lock, MapPin, Network, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
 import { db, deleteArticle, snapshotArticle, uid, updateArticle, type Article } from '../db';
 import { useWorld } from '../lib/world';
 import { usePrefs } from '../lib/prefs';
@@ -22,11 +22,18 @@ export function ArticleView() {
   const maps = useLiveQuery(() => db.maps.where('worldId').equals(world.id).toArray(), [world.id]) ?? [];
   const events = useLiveQuery(() => db.events.where('articleId').equals(articleId).sortBy('year'), [articleId]) ?? [];
 
-  if (!a) return <div className="empty-state">This article was deleted or never existed.</div>;
+  if (!a)
+    return (
+      <div className="empty-state">
+        <div className="empty-icon"><Ghost size={28} /></div>
+        This article was deleted or never existed.
+      </div>
+    );
   if (playerView && a.gmOnly)
     return (
       <div className="empty-state">
-        <Lock /> This article is GM-only and hidden in player view.
+        <div className="empty-icon"><Lock size={26} /></div>
+        This article is GM-only and hidden in player view.
       </div>
     );
 
@@ -59,9 +66,11 @@ export function ArticleView() {
       )}
       <header className="article-head">
         <div className="grow">
-          <div className="type-label" style={{ color: t?.color }}>
-            <TemplateIcon name={t?.icon} size={13} /> {t?.name ?? 'Article'}
-            <span className={`status status-${a.status}`}>{a.status}</span>
+          <div className="type-label">
+            <span className="type-label type-pill" style={{ color: t?.color }}>
+              <TemplateIcon name={t?.icon} size={13} /> {t?.name ?? 'Article'}
+            </span>
+            <span className={`status status-${a.status}`}>{a.status === 'done' ? 'finished' : a.status}</span>
             {a.gmOnly && (
               <span className="badge gm">
                 <Lock size={11} /> GM only
@@ -98,12 +107,15 @@ export function ArticleView() {
           </Link>
         </div>
       </header>
+      <div className="ornament" aria-hidden>
+        <span>✦</span>
+      </div>
 
       <div className="article-cols">
         <div className="article-main">
           {a.summary && <Markdown source={a.summary} className="lead" />}
           {a.body.trim() ? (
-            <Markdown source={a.body} />
+            <Markdown source={a.body} className="article-body" />
           ) : (
             <p className="muted">
               Nothing written yet. <Link to={`${base}/a/${a.id}/edit`}>Start writing</Link>.
@@ -136,8 +148,9 @@ export function ArticleView() {
           )}
         </div>
 
-        <aside className="infobox">
+        <aside className="infobox" style={{ ['--tc' as string]: t?.color }}>
           {a.image && <img className="infobox-img" src={a.image} alt={a.title} />}
+          <div className="infobox-title">{a.title}</div>
           {facts.length > 0 && (
             <dl>
               {facts.map((f) => (

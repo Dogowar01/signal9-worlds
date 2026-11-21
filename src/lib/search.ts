@@ -32,9 +32,15 @@ export function searchArticles(articles: Article[], query: string, limit = 30): 
     if (words.every((w) => body.includes(w) || title.includes(w))) {
       score += 15;
       const idx = body.indexOf(words[0]);
-      if (idx >= 0 && score < 60) {
+      if (idx >= 0 && score < 60 && q.length >= 3) {
         const raw = `${a.summary}\n${a.body}\n${Object.values(a.fields).join('\n')}`;
-        snippet = plainExcerpt(raw.slice(Math.max(0, idx - 60), idx + 140), 160);
+        // start on a word boundary so the snippet reads cleanly
+        let start = Math.max(0, idx - 50);
+        if (start > 0) {
+          const sp = raw.slice(start, idx).search(/\s/);
+          start = sp >= 0 ? start + sp + 1 : idx;
+        }
+        snippet = (start > 0 ? '…' : '') + plainExcerpt(raw.slice(start, idx + 140), 120);
       }
     }
     if (score > 0) {

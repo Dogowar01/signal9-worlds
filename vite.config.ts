@@ -15,7 +15,10 @@ function offlineAndUpdates(): Plugin {
     name: 'signal9-offline-and-updates',
     apply: 'build',
     generateBundle(_opts, bundle) {
-      const files = Object.keys(bundle).filter((f) => !f.endsWith('.map') && f !== 'index.html');
+      // Precache code, styles and the Latin font files; other font subsets are cached the first time they're needed.
+      const files = Object.keys(bundle).filter(
+        (f) => !f.endsWith('.map') && f !== 'index.html' && (!/\.(woff2?|ttf)$/.test(f) || /-latin-wght-/.test(f)),
+      );
       this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version: pkg.version, build: BUILD_ID, builtAt: BUILD_TIME }) });
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: serviceWorker([...STATIC_FILES, ...files]) });
     },

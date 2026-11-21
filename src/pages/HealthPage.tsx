@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { AlertTriangle, FilePlus, Link2Off, Lock, Sprout, Unlink } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FilePlus, Link2Off, Lock, Sprout, Unlink } from 'lucide-react';
 import { useWorld } from '../lib/world';
 import { useCreateArticle } from '../lib/actions';
 import { articleText, extractTargets, originalCasing } from '../lib/links';
@@ -61,8 +61,8 @@ export function HealthPage() {
         </div>
       </header>
 
-      <div className="health-grid">
-        <Panel icon={<Link2Off size={16} />} title={`Unwritten links (${brokenList.length})`} hint="Things you mentioned but haven't written yet.">
+      <div className="health-grid stagger">
+        <Panel icon={<Link2Off size={16} />} title="Unwritten links" count={brokenList.length} hint="Things you mentioned but haven't written yet.">
           {brokenList.map((b) => (
             <div key={b.label} className="health-row">
               <button className="btn sm" onClick={() => create(b.label)}>
@@ -77,7 +77,7 @@ export function HealthPage() {
           ))}
         </Panel>
 
-        <Panel icon={<Lock size={16} />} title={`Possible secret leaks (${leaks.length})`} hint="Public articles linking to GM-only ones. Players won't get a link, but they will see the name.">
+        <Panel icon={<Lock size={16} />} title="Possible secret leaks" count={leaks.length} hint="Public articles linking to GM-only ones. Players won't get a link, but they will see the name.">
           {leaks.map((l, i) => (
             <div key={i} className="health-row">
               <AlertTriangle size={14} className="warn" />
@@ -89,7 +89,7 @@ export function HealthPage() {
           <p className="muted small">{withSecrets} article(s) contain :::secret blocks (hidden in player view automatically).</p>
         </Panel>
 
-        <Panel icon={<Unlink size={16} />} title={`Orphans (${orphans.length})`} hint="Nothing links here. Connect them, or they'll be forgotten.">
+        <Panel icon={<Unlink size={16} />} title="Orphans" count={orphans.length} hint="Nothing links here. Connect them, or they'll be forgotten.">
           {orphans.map((a) => (
             <div key={a.id} className="health-row">
               <Link to={`${base}/a/${a.id}`}>{a.title}</Link>
@@ -97,7 +97,7 @@ export function HealthPage() {
           ))}
         </Panel>
 
-        <Panel icon={<Sprout size={16} />} title={`Stubs (${stubs.length})`} hint="Marked as stub, or under a paragraph long.">
+        <Panel icon={<Sprout size={16} />} title="Stubs" count={stubs.length} hint="Marked as stub, or under a paragraph long.">
           {stubs.map((a) => (
             <div key={a.id} className="health-row">
               <Link to={`${base}/a/${a.id}/edit`}>{a.title}</Link>
@@ -106,7 +106,7 @@ export function HealthPage() {
           ))}
         </Panel>
 
-        <Panel icon={<AlertTriangle size={16} />} title={`Sparse details (${emptyFacts.length})`} hint="Less than a third of the sidebar fields are filled in.">
+        <Panel icon={<AlertTriangle size={16} />} title="Sparse details" count={emptyFacts.length} hint="Less than a third of the sidebar fields are filled in.">
           {emptyFacts.map((a) => (
             <div key={a.id} className="health-row">
               <Link to={`${base}/a/${a.id}/edit`}>{a.title}</Link>
@@ -119,15 +119,22 @@ export function HealthPage() {
   );
 }
 
-function Panel({ icon, title, hint, children }: { icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
-  const items = Array.isArray(children) ? children.flat().filter(Boolean) : [children];
+function Panel({ icon, title, count, hint, children }: { icon: React.ReactNode; title: string; count: number; hint: string; children: React.ReactNode }) {
   return (
     <section className="card health-panel">
       <h2>
         {icon} {title}
+        <span className={`count ${count ? 'hot' : ''}`}>{count}</span>
       </h2>
       <p className="muted small">{hint}</p>
-      <div className="health-list">{items.length ? children : <p className="muted">All clear.</p>}</div>
+      <div className="health-list">
+        {count === 0 && (
+          <p className="all-clear">
+            <CheckCircle2 size={16} /> All clear
+          </p>
+        )}
+        {children}
+      </div>
     </section>
   );
 }

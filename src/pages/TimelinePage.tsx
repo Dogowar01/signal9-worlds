@@ -124,7 +124,7 @@ export function TimelinePage() {
               <span>{e.name}</span>
             </div>
           ))}
-          {events.map((e) => (
+          {events.map((e, i) => (
             <a
               key={e.id}
               href={`#${location.pathname}#ev-${e.id}`}
@@ -133,7 +133,7 @@ export function TimelinePage() {
                 document.getElementById(`ev-${e.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
               }}
               className="ov-tick"
-              style={{ left: `${pct(e.year)}%`, background: tlById.get(e.timelineId)?.color }}
+              style={{ left: `${pct(e.year)}%`, background: tlById.get(e.timelineId)?.color, animationDelay: `${0.2 + Math.min(i, 30) * 0.03}s` }}
               title={`${formatYear(e.year, sfx, e.endYear)}: ${e.title}`}
             />
           ))}
@@ -143,7 +143,7 @@ export function TimelinePage() {
       )}
 
       <ol className="chronicle">
-        {events.map((e) => {
+        {events.map((e, i) => {
           const era = eraOf(e.year);
           const header = era?.id !== lastEra ? era : undefined;
           const showHeader = era?.id !== lastEra;
@@ -151,7 +151,7 @@ export function TimelinePage() {
           const tl = tlById.get(e.timelineId);
           const a = e.articleId ? index.byId.get(e.articleId) : undefined;
           return (
-            <li key={e.id} id={`ev-${e.id}`} className={location.hash === `#ev-${e.id}` ? 'flash' : ''}>
+            <li key={e.id} id={`ev-${e.id}`} className={`reveal ${location.hash === `#ev-${e.id}` ? 'flash' : ''}`} style={{ ['--i' as string]: Math.min(i, 14) }}>
               {showHeader && (
                 <div className="era-head" style={{ color: header?.color }}>
                   {header ? `${header.name}` : 'Outside any era'}
