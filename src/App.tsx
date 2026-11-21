@@ -20,6 +20,11 @@ import { HealthPage } from './pages/HealthPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { PromptsPage } from './pages/PromptsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { TrashPage } from './pages/TrashPage';
+import { FamilyTreePage } from './pages/FamilyTreePage';
+import { ManuscriptsPage } from './pages/ManuscriptsPage';
+import { ManuscriptView } from './pages/ManuscriptView';
+import { UndoToast } from './components/UndoToast';
 
 export function App() {
   return (
@@ -30,6 +35,7 @@ export function App() {
           <Route path="/w/:worldId/*" element={<WorldShell />} />
           <Route path="*" element={<WorldsPage />} />
         </Routes>
+        <UndoToast />
       </HashRouter>
       <UpdateToast />
     </PrefsProvider>
@@ -76,6 +82,10 @@ function WorldShell() {
             <Route path="templates" element={<TemplatesPage />} />
             <Route path="prompts" element={<PromptsPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="trash" element={<TrashPage />} />
+            <Route path="family" element={<FamilyTreePage />} />
+            <Route path="write" element={<ManuscriptsPage />} />
+            <Route path="write/:msId" element={<ManuscriptView />} />
           </Routes>
           </div>
           </ErrorBoundary>

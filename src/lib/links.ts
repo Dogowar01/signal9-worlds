@@ -7,9 +7,17 @@ export const norm = (s: string) => s.trim().toLowerCase();
 /** All [[targets]] referenced in a piece of text (normalised). */
 export function extractTargets(text: string): string[] {
   const out: string[] = [];
-  for (const m of text.matchAll(WIKILINK_RE)) out.push(norm(m[1]));
+  for (const m of text.matchAll(WIKILINK_RE)) {
+    const t = norm(m[1].split('#')[0]);
+    // map/timeline embeds aren't article links
+    if (!t || t.startsWith('map:') || t === 'timeline' || t.startsWith('timeline:')) continue;
+    out.push(t);
+  }
   return out;
 }
+
+/** "[[Name|alias]]" → "alias", "[[Name]]" → "Name" (for plain-text places like titles). */
+export const stripLinks = (s: string) => s.replace(/!?\[\[([^[\]|#]+)(?:#[^[\]|]*)?(?:\|([^[\]]+))?\]\]/g, (_m, a: string, b?: string) => (b ?? a).trim());
 
 export function articleText(a: Article) {
   return [a.summary, a.body, ...Object.values(a.fields)].join('\n');

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router';
 import {
-  ChevronRight, Clock, Eye, EyeOff, HeartPulse, Home, LayoutTemplate, Lightbulb, Lock, Map, Moon,
-  Network, Plus, Search, Settings, Star, Sun,
+  ChevronRight, Clock, Eye, EyeOff, GitFork, HeartPulse, Home, LayoutTemplate, Lightbulb, Lock, Map, Moon,
+  Network, NotebookPen, Plus, Search, Settings, Star, Sun, Trash2,
 } from 'lucide-react';
-import type { Article } from '../db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db, type Article } from '../db';
 import { useWorld } from '../lib/world';
 import { usePrefs } from '../lib/prefs';
 import { useCreateArticle } from '../lib/actions';
@@ -20,14 +21,21 @@ export function Sidebar({ onSearch, onNavigate }: { onSearch: () => void; onNavi
   const pinned = articles.filter((a) => a.pinned).sort((a, b) => a.title.localeCompare(b.title));
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
 
+  const trashCount = useLiveQuery(() => db.trash.where('worldId').equals(world.id).filter((t) => t.kind !== 'world').count(), [world.id]) ?? 0;
+
   const nav = [
     { to: base, icon: Home, label: 'Overview', end: true },
     { to: `${base}/maps`, icon: Map, label: 'Maps' },
-    { to: `${base}/timeline`, icon: Clock, label: 'Timeline' },
+    { to: `${base}/timeline`, icon: Clock, label: 'Timeline & calendar' },
+    { to: `${base}/family`, icon: GitFork, label: 'Family trees' },
     { to: `${base}/graph`, icon: Network, label: 'Connections' },
+    { to: `${base}/write`, icon: NotebookPen, label: 'Manuscripts' },
+  ];
+  const tools = [
     { to: `${base}/health`, icon: HeartPulse, label: 'World health' },
     { to: `${base}/prompts`, icon: Lightbulb, label: 'Prompts & names' },
     { to: `${base}/templates`, icon: LayoutTemplate, label: 'Article types' },
+    { to: `${base}/trash`, icon: Trash2, label: 'Trash', badge: trashCount },
     { to: `${base}/settings`, icon: Settings, label: 'Settings & export' },
   ];
 
@@ -50,6 +58,14 @@ export function Sidebar({ onSearch, onNavigate }: { onSearch: () => void; onNavi
           </NavLink>
         ))}
       </nav>
+      <div className="tool-row">
+        {tools.map(({ to, icon: Icon, label, badge }) => (
+          <NavLink key={to} to={to} className="tool-btn" title={label} aria-label={label}>
+            <Icon size={16} />
+            {!!badge && <span className="tool-badge">{badge > 99 ? '99+' : badge}</span>}
+          </NavLink>
+        ))}
+      </div>
 
       <div className="mode-row">
         <button

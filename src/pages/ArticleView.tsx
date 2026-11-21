@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Clock, Ghost, History, Lock, MapPin, Network, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
-import { db, deleteArticle, snapshotArticle, uid, updateArticle, type Article } from '../db';
+import { Clock, Ghost, History, Lock, MapPin, Network, PenLine, Pencil, Pentagon, Plus, Star, Trash2, X } from 'lucide-react';
+import { db, snapshotArticle, uid, updateArticle, type Article } from '../db';
+import { trashArticle } from '../lib/trash';
+import { showUndo } from '../lib/undo';
+import { compareEvents, formatShortDate, getCalendar } from '../lib/calendar';
+import { extractTargets, stripLinks } from '../lib/links';
 import { useWorld } from '../lib/world';
 import { usePrefs } from '../lib/prefs';
-import { formatYear, timeAgo, useCreateArticle } from '../lib/actions';
+import { timeAgo, useCreateArticle } from '../lib/actions';
 import { RELATION_TYPES } from '../templates';
 import { Markdown } from '../components/Markdown';
 import { ArticlePicker } from '../components/ArticlePicker';
@@ -19,8 +23,10 @@ export function ArticleView() {
   const create = useCreateArticle();
   const [showHistory, setShowHistory] = useState(false);
   const a = index.byId.get(articleId);
-  const maps = useLiveQuery(() => db.maps.where('worldId').equals(world.id).toArray(), [world.id]) ?? [];
-  const events = useLiveQuery(() => db.events.where('articleId').equals(articleId).sortBy('year'), [articleId]) ?? [];
+  const { maps, events: allEvents } = useWorld();
+  const events = allEvents.filter((e) => e.articleId === articleId).sort(compareEvents(getCalendar(world)));
+  const scenes = useLiveQuery(() => db.scenes.where('worldId').equals(world.id).toArray(), [world.id]) ?? [];
+  const manuscripts = useLiveQuery(() => db.manuscripts.where('worldId').equals(world.id).toArray(), [world.id]) ?? [];
 
   if (!a)
     return (
@@ -51,7 +57,12 @@ export function ArticleView() {
   const relOut = relations.filter((r) => r.fromId === a.id && visible(index.byId.get(r.toId)));
   const relIn = relations.filter((r) => r.toId === a.id && visible(index.byId.get(r.fromId)));
   const onMaps = maps.flatMap((m) => m.pins.filter((p) => p.articleId === a.id && !(playerView && p.gmOnly)).map((p) => ({ m, p })));
+  const inRegions = maps.flatMap((m) => (m.regions ?? []).filter((r) => r.articleId === a.id && !(playerView && r.gmOnly)).map((r) => ({ m, r })));
   const myEvents = events.filter((e) => !(playerView && e.gmOnly));
+  const names = new Set([a.title, ...a.aliases].map((n) => n.trim().toLowerCase()));
+  const inScenes = playerView
+    ? []
+    : scenes.filter((s) => s.kind === 'scene' && (s.povId === a.id || s.locationId === a.id || extractTargets(`${s.body}\n${s.synopsis}`).some((t) => names.has(t))));
 
   return (
     <div className="page article">
@@ -94,10 +105,9 @@ export function ArticleView() {
             className="icon-btn danger"
             title="Delete article"
             onClick={async () => {
-              if (confirm(`Delete “${a.title}”? This can't be undone (unless you have an export).`)) {
-                await deleteArticle(a.id);
-                navigate(base);
-              }
+              const tid = await trashArticle(a.id);
+              navigate(base);
+              showUndo(a.title, tid);
             }}
           >
             <Trash2 size={17} />
@@ -175,14 +185,32 @@ export function ArticleView() {
 
           <Relations article={a} relOut={relOut} relIn={relIn} />
 
-          {onMaps.length > 0 && (
+          {onMaps.length + inRegions.length > 0 && (
             <div className="info-section">
               <h4>
                 <MapPin size={13} /> On maps
               </h4>
               {onMaps.map(({ m, p }) => (
                 <Link key={p.id} className="list-link" to={`${base}/maps/${m.id}?pin=${p.id}`}>
-                  {m.name} · {p.label}
+                  <MapPin size={12} color={p.color} /> {m.name} · {p.label}
+                </Link>
+              ))}
+              {inRegions.map(({ m, r }) => (
+                <Link key={r.id} className="list-link" to={`${base}/maps/${m.id}?region=${r.id}`}>
+                  <Pentagon size={12} color={r.color} /> {m.name} · {r.name}
+                </Link>
+              ))}
+            </div>
+          )}
+          {inScenes.length > 0 && (
+            <div className="info-section">
+              <h4>
+                <PenLine size={13} /> In your manuscripts
+              </h4>
+              {inScenes.slice(0, 8).map((s) => (
+                <Link key={s.id} className="list-link" to={`${base}/write/${s.manuscriptId}?scene=${s.id}`}>
+                  <span className="ellipsis grow">{s.title || 'Untitled scene'}</span>
+                  <span className="muted small ellipsis">{manuscripts.find((m) => m.id === s.manuscriptId)?.title}</span>
                 </Link>
               ))}
             </div>
@@ -194,7 +222,7 @@ export function ArticleView() {
               </h4>
               {myEvents.map((e) => (
                 <Link key={e.id} className="list-link" to={`${base}/timeline#ev-${e.id}`}>
-                  <b>{formatYear(e.year, world.yearSuffix, e.endYear)}</b> {e.title}
+                  <b>{formatShortDate(world, e)}</b> {stripLinks(e.title)}
                 </Link>
               ))}
             </div>

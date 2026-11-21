@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { Bold, Check, Columns2, Heading, ImagePlus, Italic, Link2, List, Lock, Quote, Trash2 } from 'lucide-react';
+import { Bold, Check, Columns2, Heading, ImagePlus, Italic, LayoutPanelTop, Link2, List, Lock, Quote, Trash2 } from 'lucide-react';
 import { deleteArticle, propagateRename, snapshotArticle, updateArticle, type Article, type Status } from '../db';
 import { useWorld } from '../lib/world';
 import { imageFileToDataUrl } from '../lib/io';
@@ -234,6 +234,9 @@ function Editor({ source }: { source: Article }) {
             <button title="Quote" onClick={() => editor.current?.linePrefix('> ')}><Quote size={15} /></button>
             <button title="List" onClick={() => editor.current?.linePrefix('- ')}><List size={15} /></button>
             <button title="Link to article ([[ ]])" onClick={() => editor.current?.wrap('[[', ']]', 'Article name')}><Link2 size={15} /></button>
+            <button title="Embed an article, section (Article#Heading), map:Name or timeline" onClick={() => editor.current?.wrap('\n![[', ']]\n', '')}>
+              <LayoutPanelTop size={15} /> Embed
+            </button>
             <button title="Secret block (hidden in player view)" onClick={() => editor.current?.wrap('\n:::secret\n', '\n:::\n', 'Only the GM sees this.')}>
               <Lock size={15} /> Secret
             </button>

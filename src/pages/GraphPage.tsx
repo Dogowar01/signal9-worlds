@@ -175,7 +175,7 @@ export function GraphPage() {
   const onDown = (e: React.PointerEvent) => {
     const id = (e.target as Element).closest('[data-node]')?.getAttribute('data-node') ?? undefined;
     drag.current = { id, sx: e.clientX, sy: e.clientY, vx: view.current.x, vy: view.current.y, moved: false };
-    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    try { (e.currentTarget as Element).setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
   };
   const onMove = (e: React.PointerEvent) => {
     const d = drag.current;

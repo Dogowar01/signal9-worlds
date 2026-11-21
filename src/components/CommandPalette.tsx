@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Clock, Eye, FilePlus, HeartPulse, Lightbulb, Map, Network, Search, Settings } from 'lucide-react';
+import { Clock, Eye, FilePlus, GitFork, HeartPulse, Lightbulb, Map, Network, NotebookPen, Search, Settings, Trash2 } from 'lucide-react';
 import { useWorld } from '../lib/world';
 import { usePrefs } from '../lib/prefs';
 import { searchArticles } from '../lib/search';
@@ -33,6 +33,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { key: 'c-maps', label: 'Go to Maps', icon: <Map size={15} />, run: go('/maps') },
       { key: 'c-time', label: 'Go to Timeline', icon: <Clock size={15} />, run: go('/timeline') },
       { key: 'c-graph', label: 'Go to Connections graph', icon: <Network size={15} />, run: go('/graph') },
+      { key: 'c-family', label: 'Go to Family trees', icon: <GitFork size={15} />, run: go('/family') },
+      { key: 'c-write', label: 'Go to Manuscripts', icon: <NotebookPen size={15} />, run: go('/write') },
+      { key: 'c-trash', label: 'Go to Trash', icon: <Trash2 size={15} />, run: go('/trash') },
       { key: 'c-health', label: 'Go to World health', icon: <HeartPulse size={15} />, run: go('/health') },
       { key: 'c-prompts', label: 'Go to Prompts & names', icon: <Lightbulb size={15} />, run: go('/prompts') },
       { key: 'c-settings', label: 'Go to Settings & export', icon: <Settings size={15} />, run: go('/settings') },

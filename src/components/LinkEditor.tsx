@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
-import { FilePlus } from 'lucide-react';
+import { Clock, FilePlus, Map as MapIcon } from 'lucide-react';
 import { useWorld } from '../lib/world';
 import { searchArticles } from '../lib/search';
 import { TemplateIcon } from '../icons';
@@ -47,16 +47,36 @@ function caretXY(el: HTMLTextAreaElement, pos: number) {
 
 /** Textarea with [[wiki link]] autocomplete and formatting helpers. */
 export const LinkEditor = forwardRef<LinkEditorHandle, Props>(function LinkEditor({ value, onChange, rows = 12, className, placeholder, onSave }, ref) {
-  const { allArticles, templateById } = useWorld();
+  const { allArticles, templateById, maps, timelines } = useWorld();
   const ta = useRef<HTMLTextAreaElement>(null);
-  const [ac, setAc] = useState<{ query: string; start: number; x: number; y: number } | null>(null);
+  const [ac, setAc] = useState<{ query: string; start: number; x: number; y: number; embed: boolean } | null>(null);
   const [sel, setSel] = useState(0);
 
-  const results = ac
-    ? (ac.query.trim() ? searchArticles(allArticles, ac.query, 8).map((h) => h.article) : [...allArticles].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8))
-    : [];
-  const showCreate = !!ac?.query.trim() && !allArticles.some((a) => a.title.toLowerCase() === ac.query.trim().toLowerCase());
-  const optionCount = results.length + (showCreate ? 1 : 0);
+  type Opt = { key: string; label: string; insert: string; icon: React.ReactNode };
+  const opts: Opt[] = [];
+  if (ac) {
+    const q = ac.query.trim().toLowerCase();
+    if (ac.embed) {
+      // embeds can also show maps and timelines
+      const mq = q.replace(/^map:/, '');
+      for (const m of maps.filter((m) => !mq || m.name.toLowerCase().includes(mq)).slice(0, 4))
+        opts.push({ key: `m${m.id}`, label: `Map: ${m.name}`, insert: `map:${m.name}`, icon: <MapIcon size={13} /> });
+      if (!q || 'timeline'.includes(q.split(':')[0]) || q.startsWith('timeline')) {
+        opts.push({ key: 'tl', label: 'Timeline (all events)', insert: 'timeline', icon: <Clock size={13} /> });
+        const tq = q.replace(/^timeline:?/, '');
+        for (const t of timelines.filter((t) => !tq || t.name.toLowerCase().includes(tq)).slice(0, 3))
+          opts.push({ key: `t${t.id}`, label: `Timeline: ${t.name}`, insert: `timeline:${t.name}`, icon: <Clock size={13} color={t.color} /> });
+      }
+    }
+    const arts = q ? searchArticles(allArticles, ac.query, 8).map((h) => h.article) : [...allArticles].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8);
+    for (const a of arts) {
+      const t = templateById.get(a.templateId);
+      opts.push({ key: a.id, label: a.title, insert: a.title, icon: <TemplateIcon name={t?.icon} size={13} color={t?.color} /> });
+    }
+    if (q && !ac.embed && !allArticles.some((a) => a.title.toLowerCase() === q))
+      opts.push({ key: 'new', label: `Link to new “${ac.query.trim()}”`, insert: ac.query.trim(), icon: <FilePlus size={13} /> });
+  }
+  const optionCount = opts.length;
 
   const setText = (text: string, caretStart: number, caretEnd = caretStart) => {
     onChange(text);
@@ -97,7 +117,8 @@ export const LinkEditor = forwardRef<LinkEditorHandle, Props>(function LinkEdito
     const m = /\[\[([^[\]\n|]{0,60})$/.exec(before);
     if (m && el.selectionStart === el.selectionEnd) {
       const { x, y } = caretXY(el, pos);
-      setAc({ query: m[1], start: pos - m[1].length, x, y });
+      const start = pos - m[1].length;
+      setAc({ query: m[1], start, x, y, embed: el.value[start - 3] === '!' });
       setSel(0);
     } else setAc(null);
   };
@@ -134,7 +155,7 @@ export const LinkEditor = forwardRef<LinkEditorHandle, Props>(function LinkEdito
             if (e.key === 'ArrowUp') return (e.preventDefault(), setSel((s) => (s - 1 + optionCount) % optionCount));
             if (e.key === 'Enter' || e.key === 'Tab') {
               e.preventDefault();
-              return choose(sel < results.length ? results[sel].title : ac.query.trim());
+              return choose(opts[sel]?.insert ?? ac.query.trim());
             }
             if (e.key === 'Escape') return (e.preventDefault(), setAc(null));
           }
@@ -171,20 +192,13 @@ export const LinkEditor = forwardRef<LinkEditorHandle, Props>(function LinkEdito
       />
       {ac && optionCount > 0 && (
         <div className="ac-menu" style={{ left: Math.min(ac.x, (ta.current?.clientWidth ?? 400) - 260), top: ac.y + 4 }}>
-          {results.map((a, i) => {
-            const t = templateById.get(a.templateId);
-            return (
-              <button key={a.id} type="button" className={`palette-item ${i === sel ? 'sel' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(a.title)}>
-                <TemplateIcon name={t?.icon} size={13} color={t?.color} />
-                <span className="ellipsis">{a.title}</span>
-              </button>
-            );
-          })}
-          {showCreate && (
-            <button type="button" className={`palette-item ${sel === results.length ? 'sel' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(ac.query.trim())}>
-              <FilePlus size={13} /> <span className="ellipsis">Link to new “{ac.query.trim()}”</span>
+          {ac.embed && <div className="ac-head">Embed</div>}
+          {opts.map((o, i) => (
+            <button key={o.key} type="button" className={`palette-item ${i === sel ? 'sel' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(o.insert)}>
+              {o.icon}
+              <span className="ellipsis">{o.label}</span>
             </button>
-          )}
+          ))}
         </div>
       )}
     </div>

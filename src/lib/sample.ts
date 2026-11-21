@@ -1,4 +1,6 @@
 import { createArticle, createWorld, db, uid, type Article } from '../db';
+import { CALENDAR_PRESETS } from './calendar';
+import { createManuscript, recordProgress } from './manuscript';
 
 function islandPath(cx: number, cy: number, r: number, seed: number, points = 28) {
   let s = seed;
@@ -150,6 +152,12 @@ She wears a replica. The real [[The Pale Crown]] is locked beneath the Spire Stu
       { id: uid(), x: 0.31, y: 0.3, label: 'Breakwater Chapel', articleId: wardens.id, color: '#6ab0de' },
       { id: uid(), x: 0.38, y: 0.5, label: 'Crown Vault', articleId: crown.id, color: '#e07a6f', gmOnly: true, note: 'Beneath the Spire Stump.' },
       { id: uid(), x: 0.7, y: 0.36, label: 'Glassfall Isle', color: '#6fb38a', note: 'Unexplored. Shard-fields everywhere.' },
+      { id: uid(), x: 0.47, y: 0.62, label: 'Smugglers\' cove', color: '#c58fd6', layerId: 'layer-trade', note: 'Where Kesh lands the glass.' },
+    ],
+    layers: [{ id: 'layer-trade', name: 'Smuggling routes', opacity: 1, gmOnly: true, hidden: false }],
+    regions: [
+      { id: uid(), name: 'Ashen Isle', color: '#e0a458', articleId: city.id, points: [[0.17, 0.24], [0.33, 0.17], [0.47, 0.28], [0.47, 0.53], [0.34, 0.66], [0.18, 0.56]] },
+      { id: uid(), name: 'Glassfall (unexplored)', color: '#9aa0a6', fog: true, points: [[0.58, 0.16], [0.8, 0.15], [0.84, 0.42], [0.62, 0.48]], note: 'Lift the fog when the party lands.' },
     ],
   });
 
@@ -160,8 +168,8 @@ She wears a replica. The real [[The Pale Crown]] is locked beneath the Spire Stu
     { id: uid(), worldId: world.id, name: 'The Age of Glass', start: -900, end: 0, color: '#9a8cf0' },
     { id: uid(), worldId: world.id, name: 'The Reach Era', start: 0, end: 400, color: '#e0a458' },
   ]);
-  const ev = (timelineId: string, year: number, title: string, description: string, articleId: string | null = null, gmOnly = false) => ({
-    id: uid(), worldId: world.id, timelineId, year, title, description, articleId, gmOnly, endYear: null,
+  const ev = (timelineId: string, year: number, title: string, description: string, articleId: string | null = null, gmOnly = false, month: number | null = null, day: number | null = null) => ({
+    id: uid(), worldId: world.id, timelineId, year, month, day, title, description, articleId, gmOnly, endYear: null,
   });
   await db.events.bulkAdd([
     ev(history.id, -880, 'The first sky-spires are raised', 'The old empire builds towers of living glass.'),
@@ -169,10 +177,46 @@ She wears a replica. The real [[The Pale Crown]] is locked beneath the Spire Stu
     ev(history.id, 0, 'The Sundering', 'The sky cracks. Year zero.', sundering.id),
     ev(history.id, 12, 'Vel Ashara founded', 'Survivors settle around the Spire Stump.', city.id),
     ev(history.id, 120, 'The Ember Concord forms', 'Seven houses sign the Lantern Accord.', concord.id),
-    ev(history.id, 312, 'Ilsabet crowned', 'After her mother is lost at sea.', queen.id),
+    ev(history.id, 312, 'Ilsabet crowned', 'After her mother is lost at sea.', queen.id, false, 6, 21),
     ev(keshLine.id, 341, 'Kesh Morrow born', 'Left on the Breakwater Chapel steps.', kesh.id),
-    ev(keshLine.id, 360, 'Kesh leaves the [[Tidewardens]]', 'Nobody will say why.', kesh.id),
-    ev(history.id, 368, 'Session 1: Saltmarket burns', 'The campaign begins.', session.id),
+    ev(keshLine.id, 360, 'Kesh leaves the Tidewardens', 'Nobody will say why.', kesh.id),
+    ev(history.id, 368, 'Session 1: Saltmarket burns', 'The campaign begins.', session.id, false, 11, 3),
   ]);
+
+  // calendar
+  await db.worlds.update(world.id, { calendar: structuredClone(CALENDAR_PRESETS[1].calendar) });
+
+  // the royal family
+  const char = T('Character');
+  const fam = async (title: string, born: string, died = '') =>
+    createArticle(world.id, { title, templateId: char, status: 'stub', fields: { born, died, species: 'Human' } });
+  const maren = await fam('Maren Varr', '262 AS', '311 AS');
+  const tomas = await fam('Tomas Varr', '258 AS', '300 AS');
+  const corvin = await fam('Corvin Hale', '285 AS');
+  const elin = await fam('Elin Varr', '318 AS');
+  const ashe = await fam('Ashe Varr', '321 AS');
+  await db.relations.bulkAdd([
+    rel(maren, 'parent of', queen), rel(tomas, 'parent of', queen), rel(maren, 'spouse of', tomas),
+    rel(queen, 'spouse of', corvin), rel(queen, 'parent of', elin), rel(corvin, 'parent of', elin),
+    rel(queen, 'parent of', ashe), rel(corvin, 'parent of', ashe), rel(elin, 'sibling of', ashe),
+  ]);
+
+  // embeds in an article
+  await db.articles.update(sundering.id, {
+    body: `No one alive remembers it. The [[Tidewardens]] remember it for them.\n\n## Before and after\n![[timeline:History]]\n\n## What the Tidewardens teach\n![[Tidewardens]]`,
+  });
+
+  // a manuscript
+  const { ms, scene } = await createManuscript(world.id, 'The Glass Tide');
+  await db.manuscripts.update(ms.id, { subtitle: 'A tale of the Shattered Reach', wordGoal: 60000 });
+  await db.scenes.update(scene.id, {
+    title: 'Smoke over Saltmarket',
+    synopsis: 'Kesh pulls a stranger out of the burning docks.',
+    status: 'draft',
+    povId: kesh.id,
+    locationId: city.id,
+    body: `The fire started at the net-mender's, which was the first thing [[Kesh Morrow]] noticed, because it was his room above it.\n\nBy the time the bells of [[Vel Ashara]] began, half of Saltmarket was smoke. Somewhere under it the [[Tidewardens]] were already singing for the drowned, and somewhere above it the [[Lantern Court]] was pretending not to watch.`,
+  });
+  await recordProgress(ms.id);
   return world.id;
 }

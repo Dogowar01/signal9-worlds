@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { BookOpen, Download, FileArchive, HardDrive, Link2, Trash2, Unlink } from 'lucide-react';
-import { db, deleteWorld } from '../db';
+import { db } from '../db';
+import { trashWorld } from '../lib/trash';
+import { showUndo } from '../lib/undo';
 import { useWorld } from '../lib/world';
 import {
   downloadMarkdownZip, downloadPlayerWiki, downloadWorldJson, fileSyncSupported, linkBackupFile, unlinkBackupFile, writeBackup,
@@ -110,10 +112,10 @@ export function SettingsPage() {
         <button
           className="btn danger"
           onClick={async () => {
-            const typed = prompt(`This permanently deletes “${world.name}” and its ${allArticles.length} articles from this browser.\nType the world name to confirm:`);
-            if (typed?.trim() !== world.name.trim()) return;
-            await deleteWorld(world.id);
+            if (!confirm(`Move “${world.name}” and its ${allArticles.length} articles to the trash?\nYou can restore it from the home screen for 30 days.`)) return;
+            const tid = await trashWorld(world.id);
             navigate('/');
+            showUndo(world.name, tid);
           }}
         >
           <Trash2 size={14} /> Delete this world

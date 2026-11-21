@@ -57,6 +57,31 @@ export interface Pin {
   color: string;
   gmOnly?: boolean;
   note?: string;
+  layerId?: string | null;
+}
+
+export interface MapLayer {
+  id: string;
+  name: string;
+  /** Optional overlay image, drawn on top of the base map at the same size. */
+  image?: string | null;
+  opacity: number;
+  gmOnly?: boolean;
+  /** Hidden when the map first opens. */
+  hidden?: boolean;
+}
+
+export interface Region {
+  id: string;
+  name: string;
+  points: [number, number][]; // 0..1 relative to image size
+  color: string;
+  articleId?: string | null;
+  layerId?: string | null;
+  gmOnly?: boolean;
+  /** Fog of war: an opaque cover in player view, a hatched outline for the GM. */
+  fog?: boolean;
+  note?: string;
 }
 
 export interface WorldMap {
@@ -67,6 +92,8 @@ export interface WorldMap {
   width: number;
   height: number;
   pins: Pin[];
+  layers?: MapLayer[];
+  regions?: Region[];
   parentMapId?: string | null;
   createdAt: number;
 }
@@ -84,6 +111,9 @@ export interface TimelineEvent {
   timelineId: string;
   title: string;
   year: number;
+  /** 1-based month and day in the world's calendar (optional). */
+  month?: number | null;
+  day?: number | null;
   endYear?: number | null;
   articleId?: string | null;
   description: string;
@@ -104,8 +134,71 @@ export interface World {
   name: string;
   description: string;
   yearSuffix: string;
+  calendar?: WorldCalendar;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface CalendarMonth {
+  name: string;
+  days: number;
+}
+export interface CalendarMoon {
+  name: string;
+  /** Days from one full moon to the next. */
+  cycle: number;
+  /** Shifts the phase so the moon can be full on a chosen day. */
+  offset: number;
+  color?: string;
+}
+export interface WorldCalendar {
+  months: CalendarMonth[];
+  weekdays: string[];
+  moons: CalendarMoon[];
+  /** Weekday of day 1, month 1, year 0. */
+  weekdayOffset: number;
+}
+
+export type SceneStatus = 'idea' | 'draft' | 'revised' | 'final';
+
+export interface Manuscript {
+  id: string;
+  worldId: string;
+  title: string;
+  subtitle: string;
+  wordGoal: number;
+  dailyGoal: number;
+  /** Total words at the end of each day, keyed YYYY-MM-DD. */
+  history: Record<string, number>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ManuscriptNode {
+  id: string;
+  worldId: string;
+  manuscriptId: string;
+  /** Chapter id for scenes, null for chapters. */
+  parentId: string | null;
+  kind: 'chapter' | 'scene';
+  title: string;
+  synopsis: string;
+  body: string;
+  order: number;
+  status: SceneStatus;
+  povId?: string | null;
+  locationId?: string | null;
+  updatedAt: number;
+}
+
+export type TrashKind = 'article' | 'map' | 'event' | 'world' | 'manuscript' | 'scene';
+export interface TrashItem {
+  id: string;
+  worldId: string;
+  kind: TrashKind;
+  label: string;
+  deletedAt: number;
+  data: unknown;
 }
 
 export interface Snapshot {
@@ -134,6 +227,9 @@ class WorldsDB extends Dexie {
   eras!: Table<Era, string>;
   snapshots!: Table<Snapshot, string>;
   kv!: Table<KV, string>;
+  trash!: Table<TrashItem, string>;
+  manuscripts!: Table<Manuscript, string>;
+  scenes!: Table<ManuscriptNode, string>;
 
   constructor() {
     super('signal9-worlds');
@@ -148,6 +244,11 @@ class WorldsDB extends Dexie {
       eras: 'id, worldId',
       snapshots: 'id, articleId, worldId, at',
       kv: 'key',
+    });
+    this.version(2).stores({
+      trash: 'id, worldId, deletedAt',
+      manuscripts: 'id, worldId',
+      scenes: 'id, worldId, manuscriptId, parentId',
     });
   }
 }
@@ -180,12 +281,14 @@ export async function createWorld(name: string, description = ''): Promise<World
 export async function deleteWorld(worldId: string) {
   await db.transaction(
     'rw',
-    [db.worlds, db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.snapshots, db.kv],
+    [db.worlds, db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.snapshots, db.kv, db.manuscripts, db.scenes, db.trash],
     async () => {
       await db.worlds.delete(worldId);
-      for (const t of [db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.snapshots]) {
+      for (const t of [db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.snapshots, db.manuscripts, db.scenes]) {
         await (t as Table<{ worldId: string }, string>).where('worldId').equals(worldId).delete();
       }
+      // items in this world's trash go too (a trashed copy of the world itself is kept)
+      await db.trash.where('worldId').equals(worldId).filter((t) => t.kind !== 'world').delete();
       await db.kv.delete(`backup:${worldId}`);
     },
   );
@@ -229,8 +332,10 @@ export async function updateArticle(id: string, changes: Partial<Article>) {
 export async function deleteArticle(id: string) {
   const a = await db.articles.get(id);
   if (!a) return;
-  await db.transaction('rw', [db.articles, db.relations, db.snapshots, db.maps, db.events, db.worlds], async () => {
+  await db.transaction('rw', [db.articles, db.relations, db.snapshots, db.maps, db.events, db.worlds, db.scenes], async () => {
     await db.articles.delete(id);
+    await db.scenes.where('worldId').equals(a.worldId).filter((s) => s.povId === id || s.locationId === id)
+      .modify((s) => { if (s.povId === id) s.povId = null; if (s.locationId === id) s.locationId = null; });
     await db.relations.where('fromId').equals(id).delete();
     await db.relations.where('toId').equals(id).delete();
     await db.snapshots.where('articleId').equals(id).delete();
@@ -238,8 +343,11 @@ export async function deleteArticle(id: string) {
     await db.events.where('articleId').equals(id).modify({ articleId: null });
     const maps = await db.maps.where('worldId').equals(a.worldId).toArray();
     for (const m of maps) {
-      if (m.pins.some((p) => p.articleId === id)) {
-        await db.maps.update(m.id, { pins: m.pins.map((p) => (p.articleId === id ? { ...p, articleId: null } : p)) });
+      if (m.pins.some((p) => p.articleId === id) || m.regions?.some((r) => r.articleId === id)) {
+        await db.maps.update(m.id, {
+          pins: m.pins.map((p) => (p.articleId === id ? { ...p, articleId: null } : p)),
+          regions: (m.regions ?? []).map((r) => (r.articleId === id ? { ...r, articleId: null } : r)),
+        });
       }
     }
     await touch(a.worldId);
@@ -265,12 +373,14 @@ export async function snapshotArticle(a: Article) {
 export async function propagateRename(worldId: string, oldTitle: string, newTitle: string, skipId?: string) {
   if (!oldTitle.trim() || oldTitle.trim().toLowerCase() === newTitle.trim().toLowerCase()) return 0;
   const esc = oldTitle.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`\\[\\[\\s*${esc}\\s*(\\|[^\\]]*)?\\]\\]`, 'gi');
+  // matches [[Old]], [[Old|alias]], [[Old#Section]] and the same inside ![[embeds]] and timeline:Old filters
+  const re = new RegExp(`\\[\\[(\\s*(?:timeline:)?)\\s*${esc}\\s*(#[^\\]|]*)?(\\|[^\\]]*)?\\]\\]`, 'gi');
+  const fix = (s: string) =>
+    s.replace(re, (_m, pre: string, sec: string | undefined, alias: string | undefined) => `[[${pre.trim()}${newTitle.trim()}${sec ?? ''}${alias ?? ''}]]`);
   let count = 0;
   const articles = await db.articles.where('worldId').equals(worldId).toArray();
   for (const a of articles) {
     if (a.id === skipId) continue;
-    const fix = (s: string) => s.replace(re, (_m, alias: string | undefined) => `[[${newTitle.trim()}${alias ?? ''}]]`);
     const body = fix(a.body);
     const summary = fix(a.summary);
     const fields = Object.fromEntries(Object.entries(a.fields).map(([k, v]) => [k, fix(v)]));
@@ -281,8 +391,17 @@ export async function propagateRename(worldId: string, oldTitle: string, newTitl
   }
   const events = await db.events.where('worldId').equals(worldId).toArray();
   for (const e of events) {
-    const d = e.description.replace(re, (_m, alias: string | undefined) => `[[${newTitle.trim()}${alias ?? ''}]]`);
+    const d = fix(e.description);
     if (d !== e.description) await db.events.update(e.id, { description: d });
+  }
+  const scenes = await db.scenes.where('worldId').equals(worldId).toArray();
+  for (const s of scenes) {
+    const body = fix(s.body);
+    const synopsis = fix(s.synopsis);
+    if (body !== s.body || synopsis !== s.synopsis) {
+      await db.scenes.update(s.id, { body, synopsis });
+      count++;
+    }
   }
   if (count) await touch(worldId);
   return count;

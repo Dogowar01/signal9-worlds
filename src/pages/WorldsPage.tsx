@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Download, Moon, Plus, Sparkles, Sun, Upload } from 'lucide-react';
+import { Download, Moon, Plus, RotateCcw, Sparkles, Sun, Upload, X } from 'lucide-react';
+import { purgeTrash, restoreTrash } from '../lib/trash';
 import { createWorld, db } from '../db';
 import { createSampleWorld } from '../lib/sample';
 import { importWorld } from '../lib/io';
@@ -19,6 +20,7 @@ export function WorldsPage() {
     for (const a of all) m.set(a.worldId, (m.get(a.worldId) ?? 0) + 1);
     return m;
   }, []);
+  const deletedWorlds = useLiveQuery(() => db.trash.filter((t) => t.kind === 'world').reverse().sortBy('deletedAt'), []);
   const navigate = useNavigate();
   const { theme, setTheme } = usePrefs();
   const { installPrompt, installed } = useAppStatus();
@@ -127,6 +129,34 @@ export function WorldsPage() {
           <p className="muted center" style={{ animation: 'fadeUp .6s .2s both' }}>
             No worlds yet. Name one above, or open the sample to look around.
           </p>
+        )}
+        {deletedWorlds && deletedWorlds.length > 0 && (
+          <section className="deleted-worlds">
+            <h3 className="sub">Recently deleted</h3>
+            {deletedWorlds.map((t) => (
+              <div key={t.id} className="trash-row">
+                <span className="grow">
+                  <b>{t.label}</b> <span className="muted small">deleted {timeAgo(t.deletedAt)}</span>
+                </span>
+                <button
+                  className="btn sm"
+                  onClick={async () => {
+                    const route = await restoreTrash(t.id);
+                    if (route) navigate(route);
+                  }}
+                >
+                  <RotateCcw size={13} /> Restore
+                </button>
+                <button
+                  className="icon-btn sm danger"
+                  title="Delete forever"
+                  onClick={() => confirm(`Permanently delete “${t.label}”? This can't be undone.`) && purgeTrash(t.id)}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </section>
         )}
         <p className="muted small center home-foot">Signal9 Worlds v{APP_VERSION}</p>
       </div>

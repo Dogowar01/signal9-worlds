@@ -1,10 +1,28 @@
 import JSZip from 'jszip';
 import {
-  db, uid, type Article, type Era, type Relation, type Template, type Timeline, type TimelineEvent, type World,
+  db, uid, type Article, type Era, type Manuscript, type ManuscriptNode, type Relation, type Template, type Timeline, type TimelineEvent, type World,
   type WorldMap,
 } from '../db';
 import { buildIndex } from './links';
 import { renderInline, renderMarkdown } from './markdown';
+import { compareEvents, formatEventDate, getCalendar } from './calendar';
+
+/** One Markdown document: chapters as headings, scenes separated by a break. */
+export function compileManuscript(ms: Manuscript, nodes: ManuscriptNode[]) {
+  const mine = nodes.filter((n) => n.manuscriptId === ms.id);
+  const chapters = mine.filter((n) => n.kind === 'chapter').sort((a, b) => a.order - b.order);
+  const out = [`# ${ms.title}`, ms.subtitle ? `_${ms.subtitle}_` : '', ''];
+  for (const ch of chapters) {
+    out.push(`## ${ch.title || 'Untitled chapter'}`, '');
+    if (ch.body.trim()) out.push(ch.body.trim(), '');
+    const scenes = mine.filter((n) => n.parentId === ch.id).sort((a, b) => a.order - b.order);
+    scenes.forEach((s, i) => {
+      if (i > 0) out.push('', '* * *', '');
+      out.push(s.body.trim(), '');
+    });
+  }
+  return out.join('\n');
+}
 
 export interface WorldExport {
   format: 'signal9-world';
@@ -18,6 +36,8 @@ export interface WorldExport {
   timelines: Timeline[];
   events: TimelineEvent[];
   eras: Era[];
+  manuscripts?: Manuscript[];
+  scenes?: ManuscriptNode[];
 }
 
 export async function exportWorld(worldId: string): Promise<WorldExport> {
@@ -37,6 +57,8 @@ export async function exportWorld(worldId: string): Promise<WorldExport> {
     timelines: await by<Timeline>(db.timelines),
     events: await by<TimelineEvent>(db.events),
     eras: await by<Era>(db.eras),
+    manuscripts: await by<Manuscript>(db.manuscripts),
+    scenes: await by<ManuscriptNode>(db.scenes),
   };
 }
 
@@ -51,7 +73,7 @@ export async function importWorld(data: WorldExport, rename?: string): Promise<s
   };
   const worldId = m(data.world.id)!;
   const now = Date.now();
-  await db.transaction('rw', [db.worlds, db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras], async () => {
+  await db.transaction('rw', [db.worlds, db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.manuscripts, db.scenes], async () => {
     await db.worlds.add({ ...data.world, id: worldId, name: rename ?? data.world.name, updatedAt: now });
     await db.templates.bulkAdd(data.templates.map((t) => ({ ...t, id: m(t.id)!, worldId })));
     await db.articles.bulkAdd(
@@ -64,7 +86,9 @@ export async function importWorld(data: WorldExport, rename?: string): Promise<s
         id: m(mp.id)!,
         worldId,
         parentMapId: m(mp.parentMapId),
-        pins: mp.pins.map((p) => ({ ...p, id: uid(), articleId: m(p.articleId), mapId: m(p.mapId) })),
+        pins: mp.pins.map((p) => ({ ...p, id: uid(), articleId: m(p.articleId), mapId: m(p.mapId), layerId: m(p.layerId) })),
+        layers: (mp.layers ?? []).map((l) => ({ ...l, id: m(l.id)! })),
+        regions: (mp.regions ?? []).map((r) => ({ ...r, id: uid(), articleId: m(r.articleId), layerId: m(r.layerId) })),
       })),
     );
     await db.timelines.bulkAdd(data.timelines.map((t) => ({ ...t, id: m(t.id)!, worldId })));
@@ -72,6 +96,12 @@ export async function importWorld(data: WorldExport, rename?: string): Promise<s
       data.events.map((e) => ({ ...e, id: m(e.id)!, worldId, timelineId: m(e.timelineId)!, articleId: m(e.articleId) })),
     );
     await db.eras.bulkAdd((data.eras ?? []).map((e) => ({ ...e, id: m(e.id)!, worldId })));
+    await db.manuscripts.bulkAdd((data.manuscripts ?? []).map((ms) => ({ ...ms, id: m(ms.id)!, worldId })));
+    await db.scenes.bulkAdd(
+      (data.scenes ?? []).map((s) => ({
+        ...s, id: m(s.id)!, worldId, manuscriptId: m(s.manuscriptId)!, parentId: m(s.parentId), povId: m(s.povId), locationId: m(s.locationId),
+      })),
+    );
   });
   return worldId;
 }
@@ -154,13 +184,15 @@ export async function downloadMarkdownZip(worldId: string) {
     zip.file(`_maps/${safeName(mp.name)}.pins.json`, JSON.stringify(mp.pins, null, 2));
   }
   const tl = new Map(data.timelines.map((t) => [t.id, t.name]));
-  const events = [...data.events].sort((x, y) => x.year - y.year);
+  const events = [...data.events].sort(compareEvents(getCalendar(data.world)));
   if (events.length) {
-    const sfx = data.world.yearSuffix ? ` ${data.world.yearSuffix}` : '';
     zip.file(
       'Timeline.md',
-      ['# Timeline', '', ...events.map((e) => `- **${e.year}${e.endYear != null ? `–${e.endYear}` : ''}${sfx}** · ${e.title} _(${tl.get(e.timelineId) ?? ''})_${e.description ? ` — ${e.description}` : ''}`)].join('\n'),
+      ['# Timeline', '', ...events.map((e) => `- **${formatEventDate(data.world, e)}** · ${e.title} _(${tl.get(e.timelineId) ?? ''})_${e.description ? ` — ${e.description}` : ''}`)].join('\n'),
     );
+  }
+  for (const ms of data.manuscripts ?? []) {
+    zip.file(`_manuscripts/${safeName(ms.title)}.md`, compileManuscript(ms, data.scenes ?? []));
   }
   zip.file('world.s9world.json', JSON.stringify(data));
   const blob = await zip.generateAsync({ type: 'blob' });
@@ -172,8 +204,16 @@ export async function downloadPlayerWiki(worldId: string) {
   const data = await exportWorld(worldId);
   const visible = data.articles.filter((a) => !a.gmOnly).sort((x, y) => x.title.localeCompare(y.title));
   const index = buildIndex(data.articles);
-  const ctx = { resolve: index.resolve, playerView: true, href: (a: Article) => `#a-${a.id}` };
   const tpl = new Map(data.templates.map((t) => [t.id, t]));
+  const ctx = {
+    resolve: index.resolve,
+    playerView: true,
+    href: (a: Article) => `#a-${a.id}`,
+    typeOf: (a: Article) => {
+      const t = tpl.get(a.templateId);
+      return t ? { name: t.name, color: t.color } : undefined;
+    },
+  };
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const sections = visible.map((a) => {
     const t = tpl.get(a.templateId);
@@ -183,10 +223,9 @@ export async function downloadPlayerWiki(worldId: string) {
       .join('');
     return `<section id="a-${a.id}" class="page"><p class="type" style="color:${t?.color ?? '#999'}">${esc(t?.name ?? '')}</p><h1>${esc(a.title)}</h1>${a.summary ? `<p class="lead">${renderInline(a.summary, ctx)}</p>` : ''}<div class="cols"><div class="body">${renderMarkdown(a.body, ctx)}</div>${a.image || facts ? `<aside>${a.image ? `<img src="${a.image}" alt="">` : ''}${facts ? `<dl>${facts}</dl>` : ''}</aside>` : ''}</div></section>`;
   });
-  const sfx = data.world.yearSuffix ? ` ${data.world.yearSuffix}` : '';
-  const events = data.events.filter((e) => !e.gmOnly).sort((x, y) => x.year - y.year);
+  const events = data.events.filter((e) => !e.gmOnly).sort(compareEvents(getCalendar(data.world)));
   const timeline = events.length
-    ? `<section id="timeline" class="page"><h1>Timeline</h1><ol class="tl">${events.map((e) => `<li><b>${e.year}${e.endYear != null ? `–${e.endYear}` : ''}${esc(sfx)}</b> ${esc(e.title)}${e.description ? `<div>${renderInline(e.description, ctx)}</div>` : ''}</li>`).join('')}</ol></section>`
+    ? `<section id="timeline" class="page"><h1>Timeline</h1><ol class="tl">${events.map((e) => `<li><b>${esc(formatEventDate(data.world, e))}</b> ${esc(e.title)}${e.description ? `<div>${renderInline(e.description, ctx)}</div>` : ''}</li>`).join('')}</ol></section>`
     : '';
   const nav = visible.map((a) => `<li><a href="#a-${a.id}">${esc(a.title)}</a></li>`).join('');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(data.world.name)}</title><style>
