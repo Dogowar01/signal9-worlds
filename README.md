@@ -8,7 +8,9 @@ Everything is stored in your browser (IndexedDB). Nothing is sent anywhere. You 
 
 | Area | What you get |
 | --- | --- |
-| **Articles** | 15 starter types (Character, Location, Organization, Species, Culture, Religion, Item, Event, Magic & Tech, Language, Myth & Lore, Document, Quest & Plot, Session, Note), each with its own sidebar fields. Markdown body, summary line, aliases, tags, image, parent/child nesting, status (stub, draft, finished). |
+| **Articles** | 18 starter types. Short **facts** go in the sidebar box; detailed types (Species, Culture, Region, Settlement, Organization, Custom & Tradition, Character) also have long-form **sections** grouped under headings, each with a guiding question, plus **tables** (e.g. life stages). Markdown body, summary line, aliases, tags, image, nesting, writing progress (stub, draft, finished). Long articles get a contents panel that follows your reading, collapsible sections, and a tree of sub-pages. |
+| **Canon status** | Mark articles, individual facts/sections and passages as **Established, Provisional, Unresolved, Visual reference or Not canon** (`:::provisional … :::` blocks, or the dot beside any field). A sidebar lens shows *All material*, *Hide not-canon* or *Established only*. |
+| **Open questions** | Attach undecided questions to any article (or the world), record the decision when you make it, and track them all on the **Canon & questions** page with every marked passage. |
 | **Wiki links** | Type `[[` for autocomplete. Links to things you haven't written yet show in red; click one to create it. Hover any link for a preview. Every article lists what links to it ("Mentioned in"). Renaming an article rewrites links everywhere. |
 | **Secrets** | Wrap text in `:::secret … :::` or mark a whole article, pin or event GM-only. **Player view** (sidebar toggle) hides all of it. |
 | **Relationships** | Typed links between articles (ally of, member of, rules, parent of…), which also power the family trees and the connections graph. |
@@ -18,8 +20,8 @@ Everything is stored in your browser (IndexedDB). Nothing is sent anywhere. You 
 | **Timeline & calendar** | Parallel tracks, eras, negative years, date ranges. Build your own **calendar** (months, weekdays, any number of moons) or start from a preset; events can have a month and day ("21st of Highsun, 312 AS") and there's a month-grid calendar view with moon phases. |
 | **Embeds** | `![[Article]]` shows an article card, `![[Article#Heading]]` pulls in one section, `![[map:Name]]` a live mini-map, `![[timeline]]` or `![[timeline:Track or Article]]` a chronicle. Autocomplete suggests all of them. |
 | **Manuscripts** | Novel mode: chapters and scenes in a binder, a distraction-free editor with `[[links]]`, point-of-view and location per scene, status (idea → final), word goals, daily progress and streaks, focus mode, a typeset read-through, and Markdown export. Articles list the scenes they appear in. |
-| **World health** | Unwritten links, orphans, stubs, sparse infoboxes, and *secret leaks* (public articles naming GM-only ones). |
-| **Article types** | Rename, recolor, re-icon any type; add, remove or reorder fields; make your own. |
+| **World health** | **Name clashes** (identical or easily confused names across articles, aliases, pins and regions: *Serevan / Serevann*, *Serrath / Sarrath*), unwritten links, orphans, stubs, sparse infoboxes, and *secret leaks*. The editor also warns as you type a lookalike title. |
+| **Article types** | Rename, recolor, re-icon any type; add facts, sections and tables; set group headings and guiding questions; make your own. A **Detailed types** library adds or upgrades types in existing worlds without touching your data. |
 | **Prompts & names** | 40 worldbuilding prompts (one click turns an answer into a note) and a 5-style name generator. |
 | **Search** | `Ctrl+K` / `⌘K` palette: fuzzy search, commands, and "create X as Character" in one place. |
 | **Version history** | A snapshot is saved each time you start editing an article; restore any of the last 30. |

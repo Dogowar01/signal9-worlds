@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { Bold, Check, Columns2, Heading, ImagePlus, Italic, LayoutPanelTop, Link2, List, Lock, Quote, Trash2 } from 'lucide-react';
-import { deleteArticle, propagateRename, snapshotArticle, updateArticle, type Article, type Status } from '../db';
+import { Bold, Check, Columns2, Heading, ImagePlus, Italic, LayoutPanelTop, Link2, List, Lock, Quote, Trash2, TriangleAlert } from 'lucide-react';
+import { deleteArticle, propagateRename, snapshotArticle, updateArticle, type Article, type CanonStatus, type Status } from '../db';
+import { isSection } from '../templates';
+import { CANON_META, CANON_ORDER } from '../lib/canon';
+import { similarTo } from '../lib/names';
+import { CanonPicker } from '../components/Canon';
+import { SectionsEditor } from '../components/SectionsEditor';
 import { useWorld } from '../lib/world';
 import { imageFileToDataUrl } from '../lib/io';
 import { LinkEditor, type LinkEditorHandle } from '../components/LinkEditor';
@@ -30,7 +35,7 @@ export function ArticleEdit() {
 }
 
 function Editor({ source }: { source: Article }) {
-  const { world, templates, templateById, index } = useWorld();
+  const { world, templates, templateById, index, allArticles, maps } = useWorld();
   const navigate = useNavigate();
   const [draft, setDraft] = useState<Article>(source);
   const [aliases, setAliases] = useState(source.aliases.join(', '));
@@ -107,6 +112,27 @@ function Editor({ source }: { source: Article }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const setFieldCanon = (key: string, s: CanonStatus | undefined) => {
+    const next = { ...(latest.current.fieldCanon ?? {}) };
+    if (s) next[key] = s;
+    else delete next[key];
+    change({ fieldCanon: next });
+  };
+  const words = [draft.body, ...Object.values(draft.fields)].reduce((n, s) => n + (s.match(/\S+/g)?.length ?? 0), 0);
+  const nameEntries = useMemo(
+    () => [
+      ...allArticles.flatMap((a) => [a.title, ...a.aliases].filter(Boolean).map((name) => ({ name, kind: templateById.get(a.templateId)?.name ?? 'article', owner: a.id }))),
+      ...maps.flatMap((m) => [
+        ...m.pins.map((p) => ({ name: p.label, kind: `pin on ${m.name}`, owner: `pin:${p.id}`, link: p.articleId ?? undefined })),
+        ...(m.regions ?? []).map((r) => ({ name: r.name, kind: `region on ${m.name}`, owner: `region:${r.id}`, link: r.articleId ?? undefined })),
+      ]),
+    ],
+    [allArticles, maps, templateById],
+  );
+  const lookalikes = draft.title.trim() && draft.title !== 'Untitled'
+    ? similarTo(draft.title, nameEntries, source.id).filter((e) => !('link' in e && e.link === source.id))
+    : [];
+
   const descendants = new Set<string>([source.id]);
   const walk = (id: string) => (index.children.get(id) ?? []).forEach((c) => (descendants.add(c.id), walk(c.id)));
   walk(source.id);
@@ -128,11 +154,24 @@ function Editor({ source }: { source: Article }) {
           onFocus={(e) => source.title === 'Untitled' && e.target.select()}
           onChange={(e) => change({ title: e.target.value })}
         />
+        <CanonPicker value={draft.canon} onChange={(s) => change({ canon: s })} placeholder="Canon status" />
         <span className={`save-state ${saveState}`}>{saveState === 'saved' ? 'Saved' : saveState === 'saving' ? 'Saving…' : 'Editing'}</span>
         <button className="btn primary" onClick={done}>
           <Check size={16} /> Done
         </button>
       </header>
+      {lookalikes.length > 0 && (
+        <p className="hint-bar warn-bar small">
+          <TriangleAlert size={13} /> Similar names already exist:{' '}
+          {lookalikes.map((e, i) => (
+            <span key={i}>
+              {i > 0 && ', '}
+              <b>{e.name}</b> <span className="muted">({e.kind})</span>
+            </span>
+          ))}
+          . Easy to confuse later; rename one if they aren't meant to be related.
+        </p>
+      )}
       {originalTitle.current && draft.title.trim() !== originalTitle.current.trim() && (
         <p className="hint-bar small">Renaming: links to “{originalTitle.current}” in other articles will be updated when you press Done.</p>
       )}
@@ -150,7 +189,7 @@ function Editor({ source }: { source: Article }) {
             </select>
           </label>
           <label className="field">
-            <span>Status</span>
+            <span>Writing progress</span>
             <select className="input sm" value={draft.status} onChange={(e) => change({ status: e.target.value as Status })}>
               <option value="stub">Stub</option>
               <option value="draft">Draft</option>
@@ -200,14 +239,17 @@ function Editor({ source }: { source: Article }) {
             )}
           </div>
 
-          {t && t.fields.length > 0 && (
+          {t && t.fields.some((f) => !isSection(f)) && (
             <>
               <h3 className="sub" style={{ color: t.color }}>
-                <TemplateIcon name={t.icon} size={14} /> {t.name} details
+                <TemplateIcon name={t.icon} size={14} /> {t.name} facts
               </h3>
-              {t.fields.map((f) => (
+              {t.fields.filter((f) => !isSection(f)).map((f) => (
                 <label key={f.key} className="field">
-                  <span>{f.label}</span>
+                  <span className="row" style={{ gap: 6 }}>
+                    <CanonPicker variant="dot" value={draft.fieldCanon?.[f.key]} onChange={(s) => setFieldCanon(f.key, s)} />
+                    {f.label}
+                  </span>
                   {f.type === 'textarea' ? (
                     <textarea className="input sm" rows={3} value={draft.fields[f.key] ?? ''} onChange={(e) => change({ fields: { ...latest.current.fields, [f.key]: e.target.value } })} />
                   ) : (
@@ -227,6 +269,7 @@ function Editor({ source }: { source: Article }) {
             <span>Summary (one line, shown in previews)</span>
             <input className="input" value={draft.summary} onChange={(e) => change({ summary: e.target.value })} placeholder="Who or what is this, in a sentence?" />
           </label>
+          <div className="body-editor">
           <div className="toolbar">
             <button title="Bold (Ctrl+B)" onClick={() => editor.current?.wrap('**')}><Bold size={15} /></button>
             <button title="Italic (Ctrl+I)" onClick={() => editor.current?.wrap('_')}><Italic size={15} /></button>
@@ -240,6 +283,20 @@ function Editor({ source }: { source: Article }) {
             <button title="Secret block (hidden in player view)" onClick={() => editor.current?.wrap('\n:::secret\n', '\n:::\n', 'Only the GM sees this.')}>
               <Lock size={15} /> Secret
             </button>
+            <select
+              className="toolbar-select"
+              value=""
+              title="Mark the selected passage's canon status"
+              onChange={(e) => {
+                const k = e.target.value;
+                if (k) editor.current?.wrap(`\n:::${k}\n`, '\n:::\n', 'Text to mark');
+              }}
+            >
+              <option value="">Mark as…</option>
+              {CANON_ORDER.map((k) => (
+                <option key={k} value={k}>{CANON_META[k].label}</option>
+              ))}
+            </select>
             <span className="grow" />
             <button className={preview ? 'on' : ''} title="Toggle preview" onClick={() => setPreview(!preview)}>
               <Columns2 size={15} /> Preview
@@ -261,8 +318,19 @@ function Editor({ source }: { source: Article }) {
             )}
           </div>
           <p className="muted small">
-            {draft.body.match(/\S+/g)?.length ?? 0} words · Ctrl+S saves · changes autosave
+            {words.toLocaleString()} words · Ctrl+S saves · changes autosave
           </p>
+          </div>
+          {t && (
+            <SectionsEditor
+              template={t}
+              fields={draft.fields}
+              fieldCanon={draft.fieldCanon ?? {}}
+              setField={(key, value) => change({ fields: { ...latest.current.fields, [key]: value } })}
+              setCanon={setFieldCanon}
+              onSave={() => flush()}
+            />
+          )}
         </div>
       </div>
     </div>

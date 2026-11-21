@@ -21,6 +21,7 @@ import { TemplatesPage } from './pages/TemplatesPage';
 import { PromptsPage } from './pages/PromptsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { TrashPage } from './pages/TrashPage';
+import { CanonPage } from './pages/CanonPage';
 import { FamilyTreePage } from './pages/FamilyTreePage';
 import { ManuscriptsPage } from './pages/ManuscriptsPage';
 import { ManuscriptView } from './pages/ManuscriptView';
@@ -83,6 +84,7 @@ function WorldShell() {
             <Route path="prompts" element={<PromptsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="trash" element={<TrashPage />} />
+            <Route path="canon" element={<CanonPage />} />
             <Route path="family" element={<FamilyTreePage />} />
             <Route path="write" element={<ManuscriptsPage />} />
             <Route path="write/:msId" element={<ManuscriptView />} />

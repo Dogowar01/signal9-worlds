@@ -1,5 +1,8 @@
 import { Link } from 'react-router';
-import { AlertTriangle, CheckCircle2, FilePlus, Link2Off, Lock, Sprout, Unlink } from 'lucide-react';
+import { useMemo } from 'react';
+import { AlertTriangle, CheckCircle2, Copy, FilePlus, Link2Off, Lock, Sprout, Unlink } from 'lucide-react';
+import { findClashes, type NameEntry } from '../lib/names';
+import { isSection } from '../templates';
 import { useWorld } from '../lib/world';
 import { useCreateArticle } from '../lib/actions';
 import { articleText, extractTargets, originalCasing } from '../lib/links';
@@ -7,7 +10,7 @@ import { hasSecrets, stripSecrets } from '../lib/markdown';
 import type { Article } from '../db';
 
 export function HealthPage() {
-  const { world, allArticles, index, relations, templateById } = useWorld();
+  const { world, allArticles, index, relations, templateById, maps } = useWorld();
   const create = useCreateArticle();
   const base = `/w/${world.id}`;
 
@@ -24,9 +27,10 @@ export function HealthPage() {
   const orphans = allArticles.filter(
     (a) => !(index.incoming.get(a.id)?.size) && !a.parentId && !related.has(a.id) && !(index.children.get(a.id)?.length) && !a.pinned,
   );
-  const stubs = allArticles.filter((a) => a.status === 'stub' || a.body.trim().length < 120);
+  const textLength = (a: Article) => a.body.trim().length + Object.values(a.fields).reduce((n, v) => n + v.trim().length, 0);
+  const stubs = allArticles.filter((a) => a.status === 'stub' || textLength(a) < 120);
   const emptyFacts = allArticles.filter((a) => {
-    const fields = templateById.get(a.templateId)?.fields ?? [];
+    const fields = (templateById.get(a.templateId)?.fields ?? []).filter((f) => !isSection(f));
     if (fields.length < 3) return false;
     const filled = fields.filter((f) => a.fields[f.key]?.trim()).length;
     return filled / fields.length < 0.3;
@@ -42,6 +46,21 @@ export function HealthPage() {
         .map((t) => ({ from: a, to: t }));
     });
   const withSecrets = allArticles.filter((a) => hasSecrets(a.body)).length;
+
+  // invented names that are identical or easy to confuse
+  const clashes = useMemo(() => {
+    const entries: NameEntry[] = [
+      ...allArticles.flatMap((a) =>
+        [a.title, ...a.aliases].filter((n) => n.trim() && n !== 'Untitled').map((name) => ({ name, kind: templateById.get(a.templateId)?.name ?? 'article', owner: a.id, link: `${base}/a/${a.id}` })),
+      ),
+      ...maps.flatMap((m) => [
+        { name: m.name, kind: 'map', owner: `map:${m.id}`, link: `${base}/maps/${m.id}` },
+        ...m.pins.map((p) => ({ name: p.label, kind: `pin on ${m.name}`, owner: p.articleId ?? `pin:${p.id}`, link: `${base}/maps/${m.id}?pin=${p.id}` })),
+        ...(m.regions ?? []).map((r) => ({ name: r.name, kind: `region on ${m.name}`, owner: r.articleId ?? `region:${r.id}`, link: `${base}/maps/${m.id}?region=${r.id}` })),
+      ]),
+    ].filter((e) => e.name && e.name !== 'New pin' && e.name !== 'New region');
+    return findClashes(entries);
+  }, [allArticles, maps, templateById, base]);
 
   const total = allArticles.length || 1;
   const score = Math.round(
@@ -62,6 +81,18 @@ export function HealthPage() {
       </header>
 
       <div className="health-grid stagger">
+        <Panel icon={<Copy size={16} />} title="Name clashes" count={clashes.length} hint="Names that are the same, or close enough to confuse readers (and you, later). Rename one, or ignore it if they're meant to be related.">
+          {clashes.map((c, i) => (
+            <div key={i} className="health-row clash-row">
+              <span className={`clash-kind ${c.reason}`}>{c.reason === 'same' ? 'Same' : 'Similar'}</span>
+              <Link to={c.a.link!}>{c.a.name}</Link>
+              <span className="muted small">{c.a.kind}</span>
+              <span className="muted">·</span>
+              <Link to={c.b.link!}>{c.b.name}</Link>
+              <span className="muted small">{c.b.kind}</span>
+            </div>
+          ))}
+        </Panel>
         <Panel icon={<Link2Off size={16} />} title="Unwritten links" count={brokenList.length} hint="Things you mentioned but haven't written yet.">
           {brokenList.map((b) => (
             <div key={b.label} className="health-row">
@@ -101,7 +132,7 @@ export function HealthPage() {
           {stubs.map((a) => (
             <div key={a.id} className="health-row">
               <Link to={`${base}/a/${a.id}/edit`}>{a.title}</Link>
-              <span className="muted small">{a.body.trim().length} chars</span>
+              <span className="muted small">{textLength(a).toLocaleString()} chars</span>
             </div>
           ))}
         </Panel>

@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import type { Article, Timeline, TimelineEvent, World, WorldMap } from '../db';
+import type { Article, CanonStatus, Timeline, TimelineEvent, World, WorldMap } from '../db';
+import { CANON_META, blockKind, visibleUnderLens, type CanonLens } from './canon';
 import { WIKILINK_RE, stripLinks } from './links';
 import { compareEvents, formatShortDate, getCalendar } from './calendar';
 import { underFog } from './geometry';
@@ -18,8 +19,38 @@ export interface RenderCtx {
   events?: TimelineEvent[];
   timelines?: Timeline[];
   typeOf?: (a: Article) => { name: string; color: string } | undefined;
+  /** Which canon material to show (defaults to everything). */
+  canonLens?: CanonLens;
   /** Internal: set while rendering inside an embed so embeds don't nest. */
   depth?: number;
+}
+
+// :::provisional Optional label / :::unresolved / :::established / :::visual / :::notcanon  …  :::
+const CANON_BLOCK_RE = /^:::(provisional|unresolved|established|visual|notcanon|not-canon)[ \t]*([^\n]*)\n([\s\S]*?)^:::[ \t]*$/gim;
+
+/** Everything marked :::unresolved / :::provisional etc. in a text, for the Canon page. */
+export function canonBlocks(src: string) {
+  const out: { kind: CanonStatus; label: string; text: string }[] = [];
+  for (const m of (src || '').matchAll(CANON_BLOCK_RE)) {
+    const kind = blockKind(m[1]);
+    if (kind) out.push({ kind, label: m[2].trim(), text: m[3].trim() });
+  }
+  return out;
+}
+
+function renderCanonBlocks(s: string, ctx: RenderCtx) {
+  return s.replace(CANON_BLOCK_RE, (_m, k: string, label: string, inner: string) => {
+    const kind = blockKind(k)!;
+    const lens = ctx.canonLens ?? 'all';
+    if (ctx.playerView) {
+      // players see settled material plainly; open, rejected and visual-only notes stay hidden
+      return kind === 'established' || kind === 'provisional' ? `\n${inner}\n` : '';
+    }
+    if (!visibleUnderLens(kind, lens)) return '';
+    const meta = CANON_META[kind];
+    const title = label.trim() ? `${meta.label} · ${label.trim()}` : meta.label;
+    return `\n<div class="canon-block canon-${kind}" data-label="${esc(title)}">\n\n${inner}\n</div>\n`;
+  });
 }
 
 const esc = (s: string) =>
@@ -131,7 +162,7 @@ function renderEmbed(target: string, alias: string | undefined, ctx: RenderCtx):
 }
 
 function preprocess(src: string, ctx: RenderCtx, embeds: string[] | null) {
-  let s = src.replace(SECRET_RE, (_m, label: string, inner: string) =>
+  let s = renderCanonBlocks(src, ctx).replace(SECRET_RE, (_m, label: string, inner: string) =>
     ctx.playerView
       ? ''
       : `\n<div class="secret" data-label="${esc(label.trim() || 'Secret')}">\n\n${inner}\n</div>\n`,
@@ -174,6 +205,7 @@ export function renderInline(src: string, ctx: RenderCtx): string {
 export function plainExcerpt(src: string, len = 220) {
   const t = (src || '')
     .replace(SECRET_RE, '')
+    .replace(CANON_BLOCK_RE, (_m, _k, _l, inner: string) => inner)
     .replace(/!\[\[/g, '[[')
     .replace(WIKILINK_RE, (_m, t: string, a?: string) => a ?? t)
     .replace(/[#*_>`~-]+/g, ' ')

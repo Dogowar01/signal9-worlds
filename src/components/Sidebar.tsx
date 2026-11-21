@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router';
 import {
-  ChevronRight, Clock, Eye, EyeOff, GitFork, HeartPulse, Home, LayoutTemplate, Lightbulb, Lock, Map, Moon,
+  BadgeCheck, ChevronRight, Clock, Eye, EyeOff, GitFork, HeartPulse, Home, LayoutTemplate, Lightbulb, Lock, Map, Moon,
   Network, NotebookPen, Plus, Search, Settings, Star, Sun, Trash2,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -11,16 +11,18 @@ import { usePrefs } from '../lib/prefs';
 import { useCreateArticle } from '../lib/actions';
 import { TemplateIcon } from '../icons';
 import { WorldSigil } from './WorldArt';
+import { LENS_META, type CanonLens } from '../lib/canon';
 
 export function Sidebar({ onSearch, onNavigate }: { onSearch: () => void; onNavigate: () => void }) {
   const { world, articles, templates, index } = useWorld();
-  const { playerView, setPlayerView, theme, setTheme, treeMode, setTreeMode } = usePrefs();
+  const { playerView, setPlayerView, theme, setTheme, treeMode, setTreeMode, canonLens, setCanonLens } = usePrefs();
   const create = useCreateArticle();
   const navigate = useNavigate();
   const base = `/w/${world.id}`;
   const pinned = articles.filter((a) => a.pinned).sort((a, b) => a.title.localeCompare(b.title));
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
 
+  const openQs = useLiveQuery(() => db.questions.where('worldId').equals(world.id).filter((q) => q.status === 'open').count(), [world.id]) ?? 0;
   const trashCount = useLiveQuery(() => db.trash.where('worldId').equals(world.id).filter((t) => t.kind !== 'world').count(), [world.id]) ?? 0;
 
   const nav = [
@@ -30,7 +32,8 @@ export function Sidebar({ onSearch, onNavigate }: { onSearch: () => void; onNavi
     { to: `${base}/family`, icon: GitFork, label: 'Family trees' },
     { to: `${base}/graph`, icon: Network, label: 'Connections' },
     { to: `${base}/write`, icon: NotebookPen, label: 'Manuscripts' },
-  ];
+    { to: `${base}/canon`, icon: BadgeCheck, label: 'Canon & questions', badge: openQs },
+  ] as { to: string; icon: typeof Home; label: string; end?: boolean; badge?: number }[];
   const tools = [
     { to: `${base}/health`, icon: HeartPulse, label: 'World health' },
     { to: `${base}/prompts`, icon: Lightbulb, label: 'Prompts & names' },
@@ -52,9 +55,10 @@ export function Sidebar({ onSearch, onNavigate }: { onSearch: () => void; onNavi
         <kbd>{isMac ? '⌘' : 'Ctrl'} K</kbd>
       </button>
       <nav className="nav">
-        {nav.map(({ to, icon: Icon, label, end }) => (
+        {nav.map(({ to, icon: Icon, label, end, badge }) => (
           <NavLink key={to} to={to} end={end} className="nav-item">
             <Icon size={16} /> {label}
+            {!!badge && <span className="nav-badge" title={`${badge} open questions`}>{badge}</span>}
           </NavLink>
         ))}
       </nav>
@@ -75,6 +79,19 @@ export function Sidebar({ onSearch, onNavigate }: { onSearch: () => void; onNavi
         >
           {playerView ? <Eye size={14} /> : <EyeOff size={14} />} {playerView ? 'Player view' : 'GM view'}
         </button>
+        {!playerView && (
+          <select
+            className={`lens-select ${canonLens !== 'all' ? 'on' : ''}`}
+            value={canonLens}
+            onChange={(e) => setCanonLens(e.target.value as CanonLens)}
+            title={LENS_META[canonLens].hint}
+            aria-label="Which canon material to show"
+          >
+            {(Object.keys(LENS_META) as CanonLens[]).map((l) => (
+              <option key={l} value={l}>{LENS_META[l].label}</option>
+            ))}
+          </select>
+        )}
         <button className="icon-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">
           {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
         </button>

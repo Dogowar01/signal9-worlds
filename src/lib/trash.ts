@@ -168,7 +168,7 @@ export async function restoreTrash(trashId: string): Promise<string | null> {
     }
     case 'world': {
       const d = t.data as WorldExport & { snapshots?: Snapshot[] };
-      await db.transaction('rw', [db.worlds, db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.snapshots, db.manuscripts, db.scenes], async () => {
+      await db.transaction('rw', [db.worlds, db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.snapshots, db.manuscripts, db.scenes, db.questions], async () => {
         await db.worlds.put({ ...d.world, updatedAt: Date.now() });
         await db.templates.bulkPut(d.templates);
         await db.articles.bulkPut(d.articles);
@@ -179,6 +179,7 @@ export async function restoreTrash(trashId: string): Promise<string | null> {
         await db.eras.bulkPut(d.eras ?? []);
         await db.manuscripts.bulkPut(d.manuscripts ?? []);
         await db.scenes.bulkPut(d.scenes ?? []);
+        await db.questions.bulkPut(d.questions ?? []);
         if (d.snapshots?.length) await db.snapshots.bulkPut(d.snapshots);
       });
       route = `/w/${d.world.id}`;

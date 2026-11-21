@@ -5,6 +5,7 @@ import { db, type Article, type Relation, type Template, type Timeline, type Tim
 import { buildIndex, type LinkIndex } from './links';
 import { usePrefs } from './prefs';
 import type { RenderCtx } from './markdown';
+import { visibleUnderLens } from './canon';
 
 interface WorldData {
   world: World;
@@ -25,7 +26,7 @@ interface WorldData {
 const Ctx = createContext<WorldData | null>(null);
 
 export function WorldProvider({ worldId, children, fallback }: { worldId: string; children: ReactNode; fallback: ReactNode }) {
-  const { playerView } = usePrefs();
+  const { playerView, canonLens } = usePrefs();
   const world = useLiveQuery(() => db.worlds.get(worldId), [worldId], null);
   const allArticles = useLiveQuery(() => db.articles.where('worldId').equals(worldId).toArray(), [worldId]);
   const templates = useLiveQuery(() => db.templates.where('worldId').equals(worldId).sortBy('order'), [worldId]);
@@ -36,7 +37,7 @@ export function WorldProvider({ worldId, children, fallback }: { worldId: string
 
   const value = useMemo<WorldData | null>(() => {
     if (!world || !allArticles || !templates || !relations || !maps || !events || !timelines) return null;
-    const articles = playerView ? allArticles.filter((a) => !a.gmOnly) : allArticles;
+    const articles = allArticles.filter((a) => !(playerView && a.gmOnly) && (playerView ? a.canon !== 'notcanon' : visibleUnderLens(a.canon, canonLens)));
     const index = buildIndex(allArticles);
     const templateById = new Map(templates.map((t) => [t.id, t]));
     return {
@@ -55,6 +56,7 @@ export function WorldProvider({ worldId, children, fallback }: { worldId: string
       renderCtx: {
         resolve: index.resolve,
         playerView,
+        canonLens,
         world,
         maps,
         events,
@@ -65,7 +67,7 @@ export function WorldProvider({ worldId, children, fallback }: { worldId: string
         },
       },
     };
-  }, [world, allArticles, templates, relations, maps, events, timelines, playerView]);
+  }, [world, allArticles, templates, relations, maps, events, timelines, playerView, canonLens]);
 
   if (world === undefined)
     return (

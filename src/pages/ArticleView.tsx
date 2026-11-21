@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Clock, Ghost, History, Lock, MapPin, Network, PenLine, Pencil, Pentagon, Plus, Star, Trash2, X } from 'lucide-react';
@@ -10,7 +10,12 @@ import { extractTargets, stripLinks } from '../lib/links';
 import { useWorld } from '../lib/world';
 import { usePrefs } from '../lib/prefs';
 import { timeAgo, useCreateArticle } from '../lib/actions';
-import { RELATION_TYPES } from '../templates';
+import { RELATION_TYPES, isSection } from '../templates';
+import { ArticleSections } from '../components/ArticleSections';
+import { ArticleToc } from '../components/ArticleToc';
+import { SubPages } from '../components/SubPages';
+import { QuestionsBox } from '../components/QuestionsBox';
+import { CanonBadge, CanonPicker, canonShown } from '../components/Canon';
 import { Markdown } from '../components/Markdown';
 import { ArticlePicker } from '../components/ArticlePicker';
 import { TemplateIcon } from '../icons';
@@ -18,10 +23,11 @@ import { TemplateIcon } from '../icons';
 export function ArticleView() {
   const { articleId = '' } = useParams();
   const { world, index, templateById, relations } = useWorld();
-  const { playerView } = usePrefs();
+  const { playerView, canonLens } = usePrefs();
   const navigate = useNavigate();
   const create = useCreateArticle();
   const [showHistory, setShowHistory] = useState(false);
+  const mainRef = useRef<HTMLDivElement>(null);
   const a = index.byId.get(articleId);
   const { maps, events: allEvents } = useWorld();
   const events = allEvents.filter((e) => e.articleId === articleId).sort(compareEvents(getCalendar(world)));
@@ -51,9 +57,9 @@ export function ArticleView() {
   for (let p = a.parentId ? index.byId.get(a.parentId) : undefined; p && crumbs.length < 10; p = p.parentId ? index.byId.get(p.parentId) : undefined) {
     crumbs.unshift(p);
   }
-  const facts = (t?.fields ?? []).filter((f) => a.fields[f.key]?.trim());
+  const facts = (t?.fields ?? []).filter((f) => !isSection(f) && a.fields[f.key]?.trim() && canonShown(a.fieldCanon?.[f.key], canonLens, playerView));
+  const hasSections = (t?.fields ?? []).some((f) => isSection(f) && a.fields[f.key]?.trim());
   const backlinks = [...(index.incoming.get(a.id) ?? [])].map((id) => index.byId.get(id)!).filter(visible).sort((x, y) => x.title.localeCompare(y.title));
-  const children = (index.children.get(a.id) ?? []).filter(visible);
   const relOut = relations.filter((r) => r.fromId === a.id && visible(index.byId.get(r.toId)));
   const relIn = relations.filter((r) => r.toId === a.id && visible(index.byId.get(r.fromId)));
   const onMaps = maps.flatMap((m) => m.pins.filter((p) => p.articleId === a.id && !(playerView && p.gmOnly)).map((p) => ({ m, p })));
@@ -81,7 +87,12 @@ export function ArticleView() {
             <span className="type-label type-pill" style={{ color: t?.color }}>
               <TemplateIcon name={t?.icon} size={13} /> {t?.name ?? 'Article'}
             </span>
-            <span className={`status status-${a.status}`}>{a.status === 'done' ? 'finished' : a.status}</span>
+            {playerView ? (
+              <CanonBadge status={a.canon === 'established' || a.canon === 'provisional' ? undefined : a.canon} />
+            ) : (
+              <CanonPicker value={a.canon} onChange={(s) => updateArticle(a.id, { canon: s })} placeholder="Canon status" />
+            )}
+            <span className={`status status-${a.status}`} title="Writing progress">{a.status === 'done' ? 'finished' : a.status}</span>
             {a.gmOnly && (
               <span className="badge gm">
                 <Lock size={11} /> GM only
@@ -122,28 +133,21 @@ export function ArticleView() {
       </div>
 
       <div className="article-cols">
-        <div className="article-main">
+        <div className="article-main" ref={mainRef}>
           {a.summary && <Markdown source={a.summary} className="lead" />}
           {a.body.trim() ? (
             <Markdown source={a.body} className="article-body" />
-          ) : (
+          ) : hasSections ? null : (
             <p className="muted">
               Nothing written yet. <Link to={`${base}/a/${a.id}/edit`}>Start writing</Link>.
             </p>
           )}
 
-          {(backlinks.length > 0 || children.length > 0) && (
+          <ArticleSections article={a} template={t} />
+          <SubPages article={a} />
+
+          {backlinks.length > 0 && (
             <section className="backlinks">
-              {children.length > 0 && (
-                <>
-                  <h3>Inside {a.title}</h3>
-                  <div className="chips">
-                    {children.map((c) => (
-                      <ArticleChip key={c.id} a={c} />
-                    ))}
-                  </div>
-                </>
-              )}
               {backlinks.length > 0 && (
                 <>
                   <h3>Mentioned in</h3>
@@ -158,6 +162,8 @@ export function ArticleView() {
           )}
         </div>
 
+        <div className="article-side">
+        <ArticleToc container={mainRef} watch={`${a.id}:${a.updatedAt}:${canonLens}:${playerView}`} />
         <aside className="infobox" style={{ ['--tc' as string]: t?.color }}>
           {a.image && <img className="infobox-img" src={a.image} alt={a.title} />}
           <div className="infobox-title">{a.title}</div>
@@ -165,7 +171,10 @@ export function ArticleView() {
             <dl>
               {facts.map((f) => (
                 <div key={f.key} className="fact">
-                  <dt>{f.label}</dt>
+                  <dt>
+                    {f.label}
+                    {!playerView && a.fieldCanon?.[f.key] && <CanonBadge status={a.fieldCanon[f.key]} compact />}
+                  </dt>
                   <dd>
                     <Markdown source={a.fields[f.key]} inline />
                   </dd>
@@ -184,6 +193,7 @@ export function ArticleView() {
           )}
 
           <Relations article={a} relOut={relOut} relIn={relIn} />
+          {!playerView && <QuestionsBox articleId={a.id} />}
 
           {onMaps.length + inRegions.length > 0 && (
             <div className="info-section">
@@ -234,6 +244,7 @@ export function ArticleView() {
             </button>
           </p>
         </aside>
+        </div>
       </div>
       {showHistory && <HistoryDrawer article={a} onClose={() => setShowHistory(false)} />}
     </div>

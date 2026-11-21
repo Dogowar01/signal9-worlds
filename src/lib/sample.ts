@@ -218,5 +218,30 @@ She wears a replica. The real [[The Pale Crown]] is locked beneath the Spire Stu
     body: `The fire started at the net-mender's, which was the first thing [[Kesh Morrow]] noticed, because it was his room above it.\n\nBy the time the bells of [[Vel Ashara]] began, half of Saltmarket was smoke. Somewhere under it the [[Tidewardens]] were already singing for the drowned, and somewhere above it the [[Lantern Court]] was pretending not to watch.`,
   });
   await recordProgress(ms.id);
+
+  // canon status, a detailed species and open questions
+  const aelith = (await db.articles.where('worldId').equals(world.id).toArray()).find((a) => a.title === 'Aelith')!;
+  await db.articles.update(aelith.id, {
+    canon: 'provisional',
+    fields: {
+      ...aelith.fields,
+      core_concept: 'Glass-veined people born near sky-shards. **Not** elves of light and not magical: the glass is mineral, laid down in the body over a lifetime.',
+      life_stages: JSON.stringify([
+        ['Clearblood', 'Birth–12', 'Veins barely visible; shard-sickness is a real danger.'],
+        ['Kindling', '12–30', 'Veins darken and begin to glow under stress.'],
+        ['Glassed', '30–70', 'Full adult pattern; glow can be partly controlled.'],
+        ['Clouding', '70+', 'Veins turn milky; the glow fades.'],
+      ]),
+      senses_perception: 'Some Aelith claim to feel storms coming through their veins.\n\n:::unresolved\nIs this real, or a story they tell? Decide before Session 3.\n:::',
+    },
+    fieldCanon: { life_stages: 'provisional', senses_perception: 'unresolved' },
+  });
+  await db.articles.update(city.id, { canon: 'established' });
+  await db.articles.update(crown.id, { canon: 'provisional' });
+  const q = (text: string, articleId: string | null) =>
+    db.questions.add({ id: uid(), worldId: world.id, articleId, text, status: 'open', answer: '', createdAt: Date.now(), decidedAt: null });
+  await q('Can Aelith and humans have children together?', aelith.id);
+  await q('Who really hired the arsonists in Saltmarket?', session.id);
+  await q("Does the Spire Stump's growth threaten the city within the campaign's timeframe?", city.id);
   return world.id;
 }

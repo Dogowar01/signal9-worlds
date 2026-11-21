@@ -1,11 +1,32 @@
 import Dexie, { type Table } from 'dexie';
 import { defaultTemplates } from './templates';
 
-export type FieldType = 'text' | 'textarea';
+export type FieldType = 'text' | 'textarea' | 'table';
 export interface TemplateField {
   key: string;
   label: string;
   type: FieldType;
+  /** 'sidebar' = short fact in the infobox (default for text); 'section' = its own part of the article. */
+  placement?: 'sidebar' | 'section';
+  /** Heading that groups section fields, e.g. "Biology & Anatomy". */
+  group?: string;
+  /** Guiding question shown while the field is empty. */
+  hint?: string;
+  /** Column headings for table fields. */
+  columns?: string[];
+}
+
+export type CanonStatus = 'established' | 'provisional' | 'unresolved' | 'visual' | 'notcanon';
+
+export interface Question {
+  id: string;
+  worldId: string;
+  articleId: string | null;
+  text: string;
+  status: 'open' | 'decided' | 'dropped';
+  answer: string;
+  createdAt: number;
+  decidedAt?: number | null;
 }
 
 export interface Template {
@@ -32,6 +53,10 @@ export interface Article {
   tags: string[];
   parentId: string | null;
   status: Status;
+  /** Canon standing of the article as a whole (unset = not tracked). */
+  canon?: CanonStatus;
+  /** Canon standing of individual fields, keyed by field key. */
+  fieldCanon?: Record<string, CanonStatus>;
   gmOnly: boolean;
   pinned: boolean;
   image?: string;
@@ -230,6 +255,7 @@ class WorldsDB extends Dexie {
   trash!: Table<TrashItem, string>;
   manuscripts!: Table<Manuscript, string>;
   scenes!: Table<ManuscriptNode, string>;
+  questions!: Table<Question, string>;
 
   constructor() {
     super('signal9-worlds');
@@ -249,6 +275,9 @@ class WorldsDB extends Dexie {
       trash: 'id, worldId, deletedAt',
       manuscripts: 'id, worldId',
       scenes: 'id, worldId, manuscriptId, parentId',
+    });
+    this.version(3).stores({
+      questions: 'id, worldId, articleId, status',
     });
   }
 }
@@ -281,10 +310,10 @@ export async function createWorld(name: string, description = ''): Promise<World
 export async function deleteWorld(worldId: string) {
   await db.transaction(
     'rw',
-    [db.worlds, db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.snapshots, db.kv, db.manuscripts, db.scenes, db.trash],
+    [db.worlds, db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.snapshots, db.kv, db.manuscripts, db.scenes, db.trash, db.questions],
     async () => {
       await db.worlds.delete(worldId);
-      for (const t of [db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.snapshots, db.manuscripts, db.scenes]) {
+      for (const t of [db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.snapshots, db.manuscripts, db.scenes, db.questions]) {
         await (t as Table<{ worldId: string }, string>).where('worldId').equals(worldId).delete();
       }
       // items in this world's trash go too (a trashed copy of the world itself is kept)

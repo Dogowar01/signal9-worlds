@@ -1,11 +1,51 @@
 import JSZip from 'jszip';
 import {
-  db, uid, type Article, type Era, type Manuscript, type ManuscriptNode, type Relation, type Template, type Timeline, type TimelineEvent, type World,
+  db, uid, type Article, type Era, type Manuscript, type ManuscriptNode, type Question, type Relation, type Template, type Timeline, type TimelineEvent, type World,
   type WorldMap,
 } from '../db';
 import { buildIndex } from './links';
 import { renderInline, renderMarkdown } from './markdown';
 import { compareEvents, formatEventDate, getCalendar } from './calendar';
+import { isSection, parseTable } from '../templates';
+import type { TemplateField } from '../db';
+
+function groupFields(fields: TemplateField[]) {
+  const groups: { name: string; fields: TemplateField[] }[] = [];
+  for (const fl of fields.filter(isSection)) {
+    const name = fl.group?.trim() || 'Details';
+    let g = groups.find((x) => x.name === name);
+    if (!g) groups.push((g = { name, fields: [] }));
+    g.fields.push(fl);
+  }
+  return groups;
+}
+
+function tableHtml(f: TemplateField, value: string, cell: (s: string) => string) {
+  const cols = f.columns?.length ? f.columns : ['Column'];
+  const rows = parseTable(value, cols.length).filter((r) => r.some((x) => x.trim()));
+  const e = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return `<table><thead><tr>${cols.map((c) => `<th>${e(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((x) => `<td>${cell(x)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+/** Section fields as Markdown headings (tables as Markdown tables), for the vault export. */
+function sectionsMarkdown(a: Article, fields: TemplateField[]) {
+  const out: string[] = [];
+  for (const g of groupFields(fields)) {
+    const filled = g.fields.filter((f) => a.fields[f.key]?.trim());
+    if (!filled.length) continue;
+    out.push('', `## ${g.name}`);
+    for (const f of filled) {
+      const st = a.fieldCanon?.[f.key];
+      out.push('', `### ${f.label}${st ? ` _(${st})_` : ''}`, '');
+      if (f.type === 'table') {
+        const cols = f.columns?.length ? f.columns : ['Column'];
+        const rows = parseTable(a.fields[f.key], cols.length).filter((r) => r.some((x) => x.trim()));
+        out.push(`| ${cols.join(' | ')} |`, `| ${cols.map(() => '---').join(' | ')} |`, ...rows.map((r) => `| ${r.map((x) => x.replace(/\|/g, '\\|').replace(/\n/g, ' ')).join(' | ')} |`));
+      } else out.push(a.fields[f.key].trim());
+    }
+  }
+  return out.join('\n');
+}
 
 /** One Markdown document: chapters as headings, scenes separated by a break. */
 export function compileManuscript(ms: Manuscript, nodes: ManuscriptNode[]) {
@@ -38,6 +78,7 @@ export interface WorldExport {
   eras: Era[];
   manuscripts?: Manuscript[];
   scenes?: ManuscriptNode[];
+  questions?: Question[];
 }
 
 export async function exportWorld(worldId: string): Promise<WorldExport> {
@@ -59,6 +100,7 @@ export async function exportWorld(worldId: string): Promise<WorldExport> {
     eras: await by<Era>(db.eras),
     manuscripts: await by<Manuscript>(db.manuscripts),
     scenes: await by<ManuscriptNode>(db.scenes),
+    questions: await by<Question>(db.questions),
   };
 }
 
@@ -73,7 +115,7 @@ export async function importWorld(data: WorldExport, rename?: string): Promise<s
   };
   const worldId = m(data.world.id)!;
   const now = Date.now();
-  await db.transaction('rw', [db.worlds, db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.manuscripts, db.scenes], async () => {
+  await db.transaction('rw', [db.worlds, db.articles, db.templates, db.relations, db.maps, db.timelines, db.events, db.eras, db.manuscripts, db.scenes, db.questions], async () => {
     await db.worlds.add({ ...data.world, id: worldId, name: rename ?? data.world.name, updatedAt: now });
     await db.templates.bulkAdd(data.templates.map((t) => ({ ...t, id: m(t.id)!, worldId })));
     await db.articles.bulkAdd(
@@ -102,6 +144,7 @@ export async function importWorld(data: WorldExport, rename?: string): Promise<s
         ...s, id: m(s.id)!, worldId, manuscriptId: m(s.manuscriptId)!, parentId: m(s.parentId), povId: m(s.povId), locationId: m(s.locationId),
       })),
     );
+    await db.questions.bulkAdd((data.questions ?? []).map((q) => ({ ...q, id: m(q.id)!, worldId, articleId: m(q.articleId) })));
   });
   return worldId;
 }
@@ -159,8 +202,9 @@ export async function downloadMarkdownZip(worldId: string) {
     if (a.gmOnly) lines.push('gm_only: true');
     if (a.parentId && byId.get(a.parentId)) lines.push(`parent: ${yamlStr(`[[${byId.get(a.parentId)!.title}]]`)}`);
     const reserved = new Set(['title', 'type', 'status', 'aliases', 'tags', 'gm_only', 'parent', 'relations']);
+    if (a.canon) lines.push(`canon: ${a.canon}`);
     for (const f of t?.fields ?? []) {
-      if (!a.fields[f.key]?.trim()) continue;
+      if (!a.fields[f.key]?.trim() || isSection(f)) continue;
       lines.push(`${reserved.has(f.key) ? `field_${f.key}` : f.key}: ${yamlStr(a.fields[f.key])}`);
     }
     const rels = data.relations.filter((r) => r.fromId === a.id && byId.get(r.toId));
@@ -176,6 +220,9 @@ export async function downloadMarkdownZip(worldId: string) {
     }
     if (a.summary) lines.push(`> ${a.summary}`, '');
     lines.push(a.body);
+    lines.push(sectionsMarkdown(a, t?.fields ?? []));
+    const qs = (data.questions ?? []).filter((q) => q.articleId === a.id);
+    if (qs.length) lines.push('', '## Open questions', '', ...qs.map((q) => `- [${q.status === 'open' ? ' ' : 'x'}] ${q.text}${q.answer ? ` — **${q.answer}**` : ''}`));
     zip.file(`${folder}/${safeName(a.title)}.md`, lines.join('\n'));
   }
   for (const mp of data.maps) {
@@ -202,7 +249,7 @@ export async function downloadMarkdownZip(worldId: string) {
 /** A single self-contained HTML wiki for players: no GM-only articles, no secrets. */
 export async function downloadPlayerWiki(worldId: string) {
   const data = await exportWorld(worldId);
-  const visible = data.articles.filter((a) => !a.gmOnly).sort((x, y) => x.title.localeCompare(y.title));
+  const visible = data.articles.filter((a) => !a.gmOnly && a.canon !== 'notcanon').sort((x, y) => x.title.localeCompare(y.title));
   const index = buildIndex(data.articles);
   const tpl = new Map(data.templates.map((t) => [t.id, t]));
   const ctx = {
@@ -217,11 +264,17 @@ export async function downloadPlayerWiki(worldId: string) {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const sections = visible.map((a) => {
     const t = tpl.get(a.templateId);
+    const hiddenForPlayers = (k: string) => ['unresolved', 'visual', 'notcanon'].includes(a.fieldCanon?.[k] ?? '');
+    const sections = groupFields(t?.fields ?? [])
+      .map((g) => ({ ...g, fields: g.fields.filter((f) => a.fields[f.key]?.trim() && !hiddenForPlayers(f.key)) }))
+      .filter((g) => g.fields.length)
+      .map((g) => `<h2>${esc(g.name)}</h2>${g.fields.map((f) => `<h3>${esc(f.label)}</h3>${f.type === 'table' ? tableHtml(f, a.fields[f.key], (s) => renderInline(s, ctx)) : renderMarkdown(a.fields[f.key], ctx)}`).join('')}`)
+      .join('');
     const facts = (t?.fields ?? [])
-      .filter((f) => a.fields[f.key]?.trim())
+      .filter((f) => !isSection(f) && a.fields[f.key]?.trim() && !hiddenForPlayers(f.key))
       .map((f) => `<dt>${esc(f.label)}</dt><dd>${renderInline(a.fields[f.key], ctx)}</dd>`)
       .join('');
-    return `<section id="a-${a.id}" class="page"><p class="type" style="color:${t?.color ?? '#999'}">${esc(t?.name ?? '')}</p><h1>${esc(a.title)}</h1>${a.summary ? `<p class="lead">${renderInline(a.summary, ctx)}</p>` : ''}<div class="cols"><div class="body">${renderMarkdown(a.body, ctx)}</div>${a.image || facts ? `<aside>${a.image ? `<img src="${a.image}" alt="">` : ''}${facts ? `<dl>${facts}</dl>` : ''}</aside>` : ''}</div></section>`;
+    return `<section id="a-${a.id}" class="page"><p class="type" style="color:${t?.color ?? '#999'}">${esc(t?.name ?? '')}</p><h1>${esc(a.title)}</h1>${a.summary ? `<p class="lead">${renderInline(a.summary, ctx)}</p>` : ''}<div class="cols"><div class="body">${renderMarkdown(a.body, ctx)}${sections}</div>${a.image || facts ? `<aside>${a.image ? `<img src="${a.image}" alt="">` : ''}${facts ? `<dl>${facts}</dl>` : ''}</aside>` : ''}</div></section>`;
   });
   const events = data.events.filter((e) => !e.gmOnly).sort(compareEvents(getCalendar(data.world)));
   const timeline = events.length
