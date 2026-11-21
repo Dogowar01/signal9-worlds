@@ -2,6 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';
+import { startAppServices } from './lib/appUpdate';
+
+startAppServices();
 
 // Ask the browser not to evict our IndexedDB data under storage pressure.
 navigator.storage?.persist?.().catch(() => {});

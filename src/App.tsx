@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Route, Routes, useLocation, useParams } from 'react-router';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { UpdateToast } from './components/UpdateToast';
 import { Menu } from 'lucide-react';
 import { PrefsProvider } from './lib/prefs';
 import { WorldProvider } from './lib/world';
@@ -30,6 +31,7 @@ export function App() {
           <Route path="*" element={<WorldsPage />} />
         </Routes>
       </HashRouter>
+      <UpdateToast />
     </PrefsProvider>
   );
 }

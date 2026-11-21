@@ -54,6 +54,22 @@ npm run deploy     # builds and pushes dist/ to the gh-pages branch
 
 GitHub Pages serves the `gh-pages` branch (Settings → Pages → Deploy from a branch → `gh-pages` / root). Updates usually appear within a minute.
 
+## Installing it as an app (Mac or PC)
+
+Signal9 Worlds is an installable web app: it gets its own window and Dock/taskbar icon, and it works offline.
+
+- **Chrome or Edge (recommended):** open https://dogowar01.github.io/signal9-worlds/ and click the install icon at the right of the address bar, or use **Install app** on the home screen. On a Mac it lands in Launchpad / Applications (Chrome Apps) and you can keep it in the Dock.
+- **Safari on macOS 14+:** File → **Add to Dock**.
+
+Chrome/Edge is the better choice because the automatic backup file only works there.
+
+## Updates
+
+- The installed app checks the live site for a new version on launch, every 30 minutes, and when you come back to it. When there is one, it shows **"A new version is ready → Update now"**.
+- **Settings & export → App** shows your version and has a **Check for updates** button.
+- Updating never touches your worlds; they stay in the app's local storage.
+- To ship a change: edit the code, bump `"version"` in `package.json` if you like, then run `npm run deploy`.
+
 The hosted site is just the app. Your worlds still live only in the browser you use. Use **Settings & export → World file** or the auto-backup file to move worlds between devices.
 
 ## Writing tips

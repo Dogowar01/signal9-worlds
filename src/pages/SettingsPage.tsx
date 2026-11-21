@@ -8,6 +8,7 @@ import {
   downloadMarkdownZip, downloadPlayerWiki, downloadWorldJson, fileSyncSupported, linkBackupFile, unlinkBackupFile, writeBackup,
 } from '../lib/io';
 import { timeAgo } from '../lib/actions';
+import { AppPanel } from '../components/AppPanel';
 
 export function SettingsPage() {
   const { world, allArticles } = useWorld();
@@ -101,6 +102,8 @@ export function SettingsPage() {
         )}
       </section>
       {msg && <p className="muted">{msg}</p>}
+
+      <AppPanel />
 
       <section className="card danger-zone">
         <h2>Danger zone</h2>

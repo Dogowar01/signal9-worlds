@@ -271,6 +271,8 @@ a.chip:hover, button.chip:hover { border-color: var(--accent); text-decoration: 
 .history > ul { overflow: auto; }
 .history-preview { overflow: auto; }
 .snapshot-text { white-space: pre-wrap; font-size: 13px; background: var(--panel-2); padding: 12px; border-radius: 8px; max-height: 50vh; overflow: auto; }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .toast { position: fixed; bottom: 18px; right: 18px; z-index: 60; display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 14px; box-shadow: var(--shadow); font-size: 14px; }
 
 /* Command palette */
