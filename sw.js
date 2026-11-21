@@ -1,6 +1,6 @@
 // Generated at build time. Cache name changes every deploy so old files are cleaned up.
-const CACHE = 's9-0.3.0-mwq5vo5n';
-const PRECACHE = ["./","manifest.webmanifest","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png","favicon.png","assets/index-DLfXdFuL.js","assets/fraunces-latin-wght-normal-ukD16Tqj.woff2","assets/index-B7n2z6AN.css","assets/inter-latin-wght-normal-Dx4kXJAl.woff2","assets/source-serif-4-latin-wght-italic-B-rCj6ir.woff2","assets/source-serif-4-latin-wght-normal-DMe4EKeb.woff2"];
+const CACHE = 's9-0.4.0-mwq8dbff';
+const PRECACHE = ["./","manifest.webmanifest","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png","favicon.png","assets/index-6X4IzRxn.js","assets/fraunces-latin-wght-normal-ukD16Tqj.woff2","assets/index-C-ELHV7v.css","assets/inter-latin-wght-normal-Dx4kXJAl.woff2","assets/source-serif-4-latin-wght-italic-B-rCj6ir.woff2","assets/source-serif-4-latin-wght-normal-DMe4EKeb.woff2"];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
